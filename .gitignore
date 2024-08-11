@@ -3,6 +3,9 @@
 
 # Build sandbox
 build/
+product/
+cmake/
+**/product/**
 
 # Clangd cache
 .cache/

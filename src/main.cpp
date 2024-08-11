@@ -89,12 +89,6 @@ int main(int argc, char* argv[])
 
 int main(int argc, char* argv[])
 {
-    if (argc < 2)
-    {
-        std::cerr << "Provide either name of the map file or path to it!" << std::endl;
-        return 1;
-    }
-
     sc2::Coordinator coordinator;
     coordinator.LoadSettings(argc, argv);
 
@@ -107,7 +101,7 @@ int main(int argc, char* argv[])
     Bot bot;
     coordinator.SetParticipants(
         {
-            CreateParticipant(sc2::Race::Random, &bot, "BlankBot"),
+            CreateParticipant(sc2::Race::Protoss, &bot, "BlankBot"),
             CreateComputer(
                 sc2::Race::Random,
                 sc2::Difficulty::CheatInsane,
@@ -117,7 +111,7 @@ int main(int argc, char* argv[])
         });
 
     coordinator.LaunchStarcraft();
-    coordinator.StartGame(argv[1]);
+    coordinator.StartGame("Equilibrium513AIE.SC2Map");
 
     while (coordinator.Update())
     {}
