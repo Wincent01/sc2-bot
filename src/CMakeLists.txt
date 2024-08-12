@@ -4,9 +4,13 @@
 
 set(bot_sources
     main.cpp
-    Bot.cpp)
+    Bot.cpp
+    Data.cpp
+    )
 
 add_executable(BlankBot ${bot_sources})
+
+target_include_directories(BlankBot PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 if (BUILD_FOR_LADDER)
     target_compile_definitions(BlankBot PRIVATE BUILD_FOR_LADDER)
