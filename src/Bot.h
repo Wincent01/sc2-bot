@@ -53,7 +53,7 @@ private:
     sc2::Point2D GetClosestPlace(const sc2::Point2D& center, const sc2::Point2D& pivot, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float step_size = 45.0f);
     sc2::Point2D GetClosestPlace(const sc2::Point2D& center, const sc2::Point2D& pivot, const sc2::Units& pylons, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float step_size = 45.0f);
     sc2::Point2D GetClosestPlace(const sc2::Point2D& pivot, const sc2::Units& pylons, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float step_size = 45.0f);
-    sc2::Point2D GetClosestPlaceWhileAvoiding(const sc2::Point2D& center, const sc2::Point2D& pivot, const sc2::Units& avoid, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float avoid_radius, float step_size = 45.0f);
+    sc2::Point2D GetClosestPlaceWhileAvoiding(const sc2::Point2D& center, const sc2::Point2D& pivot, const sc2::Units& avoid, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float avoid_radius, bool prefer_distance, float step_size = 45.0f);
     sc2::Point2D GetBestCenter(const sc2::Units& units, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float benchmark_radius, float step_size = 45.0f);
     std::pair<sc2::Point2D, float> GetBestPath(const sc2::Unit* unit, const sc2::Point2D& center, float min_radius, float max_radius, float step_size = 45.0f);
 
@@ -73,11 +73,16 @@ private:
 
     sc2::Units RedistributeWorkers(const sc2::Unit* base, int32_t& workers_needed);
 
+    void ReturnToMining(const sc2::Unit* probe);
+
+    bool IsMining(const sc2::Unit* probe);
+
     void FindRamps();
 
     void FindExpansions();
     
     std::vector<ActionPlan> m_BuildOrder = {
+        {sc2::ABILITY_ID::TRAIN_PROBE},
         {sc2::ABILITY_ID::TRAIN_PROBE},
         {sc2::ABILITY_ID::BUILD_PYLON},
         {sc2::ABILITY_ID::TRAIN_PROBE},
@@ -86,7 +91,18 @@ private:
         {sc2::ABILITY_ID::TRAIN_PROBE},
         {sc2::ABILITY_ID::BUILD_ASSIMILATOR},
         {sc2::ABILITY_ID::BUILD_CYBERNETICSCORE},
+        {sc2::ABILITY_ID::BUILD_NEXUS},
+        {sc2::ABILITY_ID::TRAIN_PROBE},
+        {sc2::ABILITY_ID::BUILD_ASSIMILATOR},
+        {sc2::ABILITY_ID::TRAIN_PROBE},
         {sc2::ABILITY_ID::BUILD_PYLON},
+        {sc2::ABILITY_ID::TRAIN_PROBE},
+        {sc2::ABILITY_ID::TRAIN_ADEPT},
+        {sc2::ABILITY_ID::TRAIN_PROBE},
+        {sc2::ABILITY_ID::TRAIN_PROBE},
+        {sc2::ABILITY_ID::TRAIN_PROBE},
+        {sc2::ABILITY_ID::BUILD_STARGATE},
+        {sc2::ABILITY_ID::RESEARCH_WARPGATE},
         {sc2::ABILITY_ID::TRAIN_ADEPT}
     };
 

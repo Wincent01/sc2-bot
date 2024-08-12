@@ -100,21 +100,36 @@ namespace scdata {
         bool success;
         float time;
         AbilityCost cost;
+        sc2::Tag delayed_order_tag;
+        DelayedOrder delayed_order;
+
+        BuildResult(bool success_, float time_, AbilityCost cost_, sc2::Tag delayed_order_tag_, DelayedOrder delayed_order_):
+            success(success_),
+            time(time_),
+            cost(cost_),
+            delayed_order_tag(delayed_order_tag_),
+            delayed_order(delayed_order_) {}
 
         BuildResult(bool success_, float time_, AbilityCost cost_):
             success(success_),
             time(time_),
-            cost(cost_) {}
+            cost(cost_),
+            delayed_order_tag(0),
+            delayed_order({sc2::ABILITY_ID::INVALID, {0.0f, 0.0f}, 0, 0.0f}) {}
 
         BuildResult(bool success_):
             success(success_),
             time(0.0f),
-            cost({0, 0}) {}
+            cost({0, 0}),
+            delayed_order_tag(0),
+            delayed_order({sc2::ABILITY_ID::INVALID, {0.0f, 0.0f}, 0, 0.0f}) {}
 
         BuildResult():
             success(false),
             time(0.0f),
-            cost({0, 0}) {}
+            cost({0, 0}),
+            delayed_order_tag(0),
+            delayed_order({sc2::ABILITY_ID::INVALID, {0.0f, 0.0f}, 0, 0.0f}) {}
 
         bool IsPlanning() const
         {
@@ -140,9 +155,11 @@ namespace scdata {
 
     extern std::unordered_map<sc2::ABILITY_ID, AbilityCost> AbilityCosts;
 
-    extern std::unordered_map<sc2::ABILITY_ID, sc2::UNIT_TYPEID> TrainBuilding;
+    extern std::unordered_map<sc2::ABILITY_ID, sc2::UNIT_TYPEID> AssociatedBuilding;
 
     extern std::unordered_set<sc2::ABILITY_ID> UnitTrainTypes;
+
+    extern std::unordered_set<sc2::ABILITY_ID> UpgradeTypes;
 
     extern std::unordered_map<sc2::ABILITY_ID, sc2::ABILITY_ID> UnitTrainAbilityWarpTypes;
 }
