@@ -24,6 +24,10 @@
 #include <unordered_set>
 #include <limits>
 
+#include "Utilities.h"
+
+using namespace scbot;
+
 #define PROBE_RANGE 10.0f
 #define PROBE_RANGE_SQUARED PROBE_RANGE * PROBE_RANGE
 
@@ -175,154 +179,6 @@ void Bot::OnStep()
 
     m_NextBuildDispatch += time_in_seconds;
 
-    /*
-    Bot::BuildResult result(false);
-
-    if (!AnyQueuedOrders(probes, sc2::ABILITY_ID::BUILD_PYLON) && !AnyInProgress(sc2::UNIT_TYPEID::PROTOSS_PYLON)) {
-        const auto supply = obs->GetFoodCap();
-        const auto used_supply = obs->GetFoodUsed();
-
-        if ((used_supply >= supply - 2) || (GetUnits(sc2::UNIT_TYPEID::PROTOSS_PYLON).size() == 0)) {
-            result = AttemptBuild(sc2::ABILITY_ID::BUILD_PYLON);
-
-            if (result.IsPlanning() && !result.IsSuccess()) {
-                m_Resources = m_Resources - result.cost;
-            }
-        }
-    }
-
-    const auto& gateways = GetUnits(sc2::UNIT_TYPEID::PROTOSS_GATEWAY);
-    const auto& cybernetics_cores = GetUnits(sc2::UNIT_TYPEID::PROTOSS_CYBERNETICSCORE);
-    const auto& assimilators = GetUnits(sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR);
-
-    if (!result.IsSuccess() && !AnyQueuedOrders(probes, sc2::ABILITY_ID::BUILD_GATEWAY) && !AnyInProgress(sc2::UNIT_TYPEID::PROTOSS_GATEWAY)) {
-        // Only build one if we don't have a cybernetics core.
-        bool should_build = (cybernetics_cores.size() == 0 && gateways.size() == 0) || cybernetics_cores.size() > 0;
-
-        if (should_build) {
-            result = AttemptBuild(sc2::ABILITY_ID::BUILD_GATEWAY);
-
-            if (result.IsPlanning() && !result.IsSuccess()) {
-                m_Resources = m_Resources - result.cost;
-            }
-        }
-    }
-
-    if (!result.IsSuccess() && !AnyQueuedOrders(probes, sc2::ABILITY_ID::BUILD_CYBERNETICSCORE) && !AnyInProgress(sc2::UNIT_TYPEID::PROTOSS_CYBERNETICSCORE)) {
-        if (cybernetics_cores.size() == 0 && gateways.size() > 0) {
-            result = AttemptBuild(sc2::ABILITY_ID::BUILD_CYBERNETICSCORE);
-
-            if (result.IsPlanning() && !result.IsSuccess()) {
-                m_Resources = m_Resources - result.cost;
-            }
-        }
-    }
-
-    if (!result.IsPlanning() && !AnyQueuedOrders(probes, sc2::ABILITY_ID::BUILD_ASSIMILATOR) && !AnyInProgress(sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR)) {
-        bool should_build = gateways.size() > 0 && (assimilators.size() < nexus_units.size() * 2);
-        int32_t build_amount = cybernetics_cores.size() == 0 ? 1 : (nexus_units.size() * 2) - assimilators.size();
-
-        if (should_build && build_amount > 0) {
-            result = AttemptBuild(sc2::ABILITY_ID::BUILD_ASSIMILATOR);
-
-            if (result.IsPlanning() && !result.IsSuccess()) {
-                m_Resources = m_Resources - result.cost;
-            }
-        }
-    }
-
-    if (!result.IsSuccess()) {
-        for (const auto& nexus : nexus_units) {
-            if (nexus->build_progress < 1.0f) {
-                continue;
-            }
-
-            if (AnyQueuedOrder(nexus, sc2::ABILITY_ID::TRAIN_PROBE)) {
-                continue;
-            }
-
-            // If there are less than 22 probes withing 15 units of the Nexus, build a probe.
-            int32_t workers = std::count_if(probes.begin(), probes.end(), [&nexus](const sc2::Unit* probe) {
-                return sc2::DistanceSquared2D(probe->pos, nexus->pos) < PROBE_RANGE_SQUARED;
-            });
-
-            // Get the number of assimilators within 15 units of the Nexus.
-            const auto assimilatorCount = std::count_if(assimilators.begin(), assimilators.end(), [&nexus](const sc2::Unit* assimilator) {
-                return sc2::DistanceSquared2D(assimilator->pos, nexus->pos) < PROBE_RANGE_SQUARED;
-            });
-
-            const auto idealWorkers = 16 + (3 * assimilatorCount);
-
-            if (m_Resources.minerals >= 50 && workers < idealWorkers) {
-                // Set the rally point to the closest mineral field or vespene geyser which is not saturated.
-                const auto mining_points = obs->GetUnits(sc2::Unit::Alliance::Neutral, [probes](const sc2::Unit& unit_) {
-                    bool is_correct_unit = 
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_MINERALFIELD ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_MINERALFIELD450 ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_MINERALFIELD750 ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_RICHMINERALFIELD ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_RICHMINERALFIELD750 ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_PURIFIERMINERALFIELD ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_PURIFIERMINERALFIELD750 ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_PURIFIERRICHMINERALFIELD ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_PURIFIERRICHMINERALFIELD750 ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_LABMINERALFIELD ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_LABMINERALFIELD750 ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_BATTLESTATIONMINERALFIELD ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_BATTLESTATIONMINERALFIELD750 ||
-                            unit_.unit_type == sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR;
-
-                    if (!is_correct_unit) {
-                        return false;
-                    }
-
-                    // Make sure less than 2 probes are mining it (3 for gas).
-                    const auto num_mining = std::count_if(probes.begin(), probes.end(), [&unit_](const sc2::Unit* probe) {
-                        for (const auto& order : probe->orders) {
-                            if (order.ability_id == sc2::ABILITY_ID::HARVEST_GATHER && order.target_unit_tag == unit_.tag) {
-                                return true;
-                            }
-                        }
-
-                        return false;
-                    });
-
-                    if (unit_.unit_type == sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR) {
-                        return num_mining < 3;
-                    }
-
-                    return num_mining < 2;
-                });
-
-                const auto& closest_mining_point = std::min_element(mining_points.begin(), mining_points.end(), [&nexus](const sc2::Unit* a, const sc2::Unit* b) {
-                    return sc2::DistanceSquared2D(a->pos, nexus->pos) < sc2::DistanceSquared2D(b->pos, nexus->pos);
-                });
-
-                actions->UnitCommand(nexus, sc2::ABILITY_ID::RALLY_NEXUS, *closest_mining_point);
-
-                actions->UnitCommand(nexus, sc2::ABILITY_ID::TRAIN_PROBE);
-                
-                m_Resources.minerals -= 50;
-            }
-        }
-    }
-
-    // Expand
-    if (!result.IsSuccess() && !AnyQueuedOrders(probes, sc2::ABILITY_ID::BUILD_NEXUS) && !AnyInProgress(sc2::UNIT_TYPEID::PROTOSS_NEXUS)) {
-        result = AttemptBuild(sc2::ABILITY_ID::BUILD_NEXUS);
-
-        if (result.IsPlanning() && !result.IsSuccess()) {
-            m_Resources = m_Resources - result.cost;
-        }
-    }
-
-    if (result.IsPlanning())
-    {
-        std::cout << "Planning to build (" << result.success << ") in " << result.time << " seconds at a cost of " << result.cost.minerals << " minerals and " << result.cost.vespene << " vespene" << std::endl;
-    }*/
-
-    // Remove delayed orders that have been executed.
-
 }
 
 void Bot::OnUnitCreated(const sc2::Unit* unit_)
@@ -331,7 +187,7 @@ void Bot::OnUnitCreated(const sc2::Unit* unit_)
         "(" << unit_->tag << ") was created" << std::endl;
 }
 
-void Bot::OnUnitIdle(const sc2::Unit* unit_)
+void Bot::OnUnitIdle(const sc2::Unit* unit)
 {
     auto* actions = Actions();
     const auto* obs = Observation();
@@ -339,46 +195,46 @@ void Bot::OnUnitIdle(const sc2::Unit* unit_)
     const auto minerals = obs->GetMinerals();
     const auto vespene = obs->GetVespene();
 
-    const auto& delayed_order = m_DelayedOrders.find(unit_->tag);
+    const auto& delayed_order = m_DelayedOrders.find(unit->tag);
 
     if (delayed_order != m_DelayedOrders.end()) {
-        m_CheckDelayedOrders.emplace(unit_->tag);
+        m_CheckDelayedOrders.emplace(unit->tag);
 
-        CheckDelayedOrder(unit_);
+        CheckDelayedOrder(unit);
 
         return;
     }
 
-    std::cout << sc2::UnitTypeToName(unit_->unit_type) <<
-         "(" << unit_->tag << ") is idle" << std::endl;
+    std::cout << sc2::UnitTypeToName(unit->unit_type) <<
+         "(" << unit->tag << ") is idle" << std::endl;
 
     // If the unit is a probe, send it to mine minerals or gas.
-    if (unit_->unit_type == sc2::UNIT_TYPEID::PROTOSS_PROBE) {
-        ReturnToMining(unit_);
+    if (Utilities::IsWorker(unit)) {
+        ReturnToMining(unit);
     }
 }
 
-void Bot::OnUnitDestroyed(const sc2::Unit* unit_)
+void Bot::OnUnitDestroyed(const sc2::Unit* unit)
 {
-    std::cout << sc2::UnitTypeToName(unit_->unit_type) <<
-         "(" << unit_->tag << ") was destroyed" << std::endl;
+    std::cout << sc2::UnitTypeToName(unit->unit_type) <<
+         "(" << unit->tag << ") was destroyed" << std::endl;
 
     // Remove from delayed orders.
-    const auto& it = m_DelayedOrders.find(unit_->tag);
+    const auto& it = m_DelayedOrders.find(unit->tag);
 
     if (it != m_DelayedOrders.end()) {
         m_DelayedOrders.erase(it);
     }
 
     // Remove from check delayed orders.
-    const auto& check_it = m_CheckDelayedOrders.find(unit_->tag);
+    const auto& check_it = m_CheckDelayedOrders.find(unit->tag);
 
     if (check_it != m_CheckDelayedOrders.end()) {
         m_CheckDelayedOrders.erase(check_it);
     }
 
     // Remove from orders executed.
-    const auto& executed_it = m_OrdersExecuted.find(unit_->tag);
+    const auto& executed_it = m_OrdersExecuted.find(unit->tag);
 
     if (executed_it != m_OrdersExecuted.end()) {
         m_OrdersExecuted.erase(executed_it);
@@ -458,30 +314,14 @@ sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
 
             const auto& probe = probes[0];
 
-            const auto& closest_expansion = std::min_element(m_Expansions.begin(), m_Expansions.end(), [&probe](const sc2::Point3D& a, const sc2::Point3D& b) {
-                return sc2::DistanceSquared2D(a, probe->pos) < sc2::DistanceSquared2D(b, probe->pos);
-            });
+            const auto closest_expansion = Utilities::ClosestTo(m_Expansions, probe->pos);
 
-            return *closest_expansion;
+            return closest_expansion;
         }
 
-        // The closest expansion with the smallest average distance to all Nexus units.
-        const auto& closest_expansion = std::min_element(m_Expansions.begin(), m_Expansions.end(), [&nexus_units](const sc2::Point3D& a, const sc2::Point3D& b) {
-            float avg_distance_a = 0.0f;
-            float avg_distance_b = 0.0f;
+        const auto& closest_expansion = Utilities::ClosestAverageTo(m_Expansions, nexus_units);
 
-            for (const auto& nexus : nexus_units) {
-                avg_distance_a += sc2::Distance2D(a, nexus->pos);
-                avg_distance_b += sc2::Distance2D(b, nexus->pos);
-            }
-
-            avg_distance_a /= nexus_units.size();
-            avg_distance_b /= nexus_units.size();
-
-            return avg_distance_a < avg_distance_b;
-        });
-
-        return *closest_expansion;
+        return closest_expansion;
     }
 
     const auto& pylons = GetUnits(sc2::UNIT_TYPEID::PROTOSS_PYLON);
@@ -490,11 +330,11 @@ sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
         // Build the Pylon at the closest ramp.
         const auto& nexus_units = GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
 
-        if (nexus_units.size() == 0) {
+        if (nexus_units.empty()) {
             return sc2::Point2D(0.0f, 0.0f);
         }
 
-        if (pylons.size() == 0) {
+        if (pylons.empty()) {
             const auto& closest_nexus = nexus_units[0];
 
             const auto& ramp = GetClosestRamp(closest_nexus->pos);
@@ -502,126 +342,59 @@ sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
             return GetClosestPlace(ramp, closest_nexus->pos, ability_id, 2.0f, 4.0f);
         }
 
-        // Build pylons where:
-        // * there are none within 15 units of a Nexus;
-        // * not within 5 units of another pylon;
-        // * not within 4 units of a mineral field or vespene geyser;
-        // * within range of unpowers structures (priority).
-        const auto unpowered_structures = obs->GetUnits(sc2::Unit::Alliance::Self, [this](const sc2::Unit& unit_) {
-            return unit_.is_powered == false && unit_.build_progress == 1.0f &&
-                   PoweredStructures.find(unit_.unit_type) == PoweredStructures.end();
+        const auto unpowered_structures = Utilities::FilterUnits(m_AllUnits, [this](const sc2::Unit* unit) {
+            return Utilities::RequiresPower(unit) && !Utilities::IsPowered(unit);
         });
 
         if (unpowered_structures.size() != 0) {
             return GetBestCenter(unpowered_structures, ability_id, 3.0f, 5.0f, 5.0f);
         }
 
-        const auto mining_points = obs->GetUnits(sc2::Unit::Alliance::Neutral, [](const sc2::Unit& unit_) {
-            return  unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_MINERALFIELD ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_MINERALFIELD450 ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_MINERALFIELD750 ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_RICHMINERALFIELD ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_RICHMINERALFIELD750 ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_PURIFIERMINERALFIELD ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_PURIFIERMINERALFIELD750 ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_PURIFIERRICHMINERALFIELD ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_PURIFIERRICHMINERALFIELD750 ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_LABMINERALFIELD ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_LABMINERALFIELD750 ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_BATTLESTATIONMINERALFIELD ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_BATTLESTATIONMINERALFIELD750 ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR;
+        const auto mining_points = Utilities::GetResourcePoints(m_AllUnits, true, false, true);
+
+        const sc2::Unit* fewest_pylons = Utilities::SelectUnitMin(nexus_units, [this, &pylons](const sc2::Unit* nexus) {
+            return Utilities::CountWithinRange(pylons, nexus->pos, 15.0f);
         });
 
-        const sc2::Unit* fewest_pylons = nullptr;
-        int32_t fewest_pylons_count = std::numeric_limits<int32_t>::max();
-        
-        for (const auto& nexus : nexus_units) {
-            const auto& closest_pylon = std::min_element(pylons.begin(), pylons.end(), [&nexus](const sc2::Unit* a, const sc2::Unit* b) {
-                return sc2::DistanceSquared2D(a->pos, nexus->pos) < sc2::DistanceSquared2D(b->pos, nexus->pos);
-            });
-
-            if (sc2::DistanceSquared2D((*closest_pylon)->pos, nexus->pos) > 15.0f * 15.0f) {
-                return GetClosestPlaceWhileAvoiding(nexus->pos, nexus->pos, mining_points, ability_id, 5.0f, 10.0f, 6.0f, true);
-            }
-
-            const auto& pylons_within_range = std::count_if(pylons.begin(), pylons.end(), [&nexus](const sc2::Unit* pylon) {
-                return sc2::DistanceSquared2D(pylon->pos, nexus->pos) < 15.0f * 15.0f;
-            });
-
-            if (pylons_within_range < fewest_pylons_count) {
-                fewest_pylons = *closest_pylon;
-                fewest_pylons_count = pylons_within_range;
-            }
-        }
-
         // Place while avoiding both pylons and mining points.
-        sc2::Units avoid;
-
-        for (const auto& pylon : pylons) {
-            avoid.push_back(pylon);
-        }
-
-        for (const auto& mining_point : mining_points) {
-            avoid.push_back(mining_point);
-        }
+        sc2::Units avoid = Utilities::Union(pylons, mining_points);
 
         return GetClosestPlaceWhileAvoiding(fewest_pylons->pos, fewest_pylons->pos, avoid, ability_id, 5.0f, 10.0f, 6.0f, true);
     }
 
     if (ability_id == sc2::ABILITY_ID::BUILD_ASSIMILATOR) {
         // Build the Assimilator at the closest vespene geyser.
-        const auto nexus_units = FilterOutInProgress(GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS));
+        const auto nexus_units = GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
 
-        if (nexus_units.size() == 0) {
+        if (nexus_units.empty()) {
             return sc2::Point2D(0.0f, 0.0f);
         }
 
         const auto& assimilators = GetUnits(sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR);
         
         // Select a Nexus that has less than 2 assimilators within 15 units of it.
-        const sc2::Unit* selected_nexus = nullptr;
-        int32_t min_assimilators_count = 2;
-
-        for (const auto& nexus : nexus_units) {
-            int32_t assimilators_count = std::count_if(assimilators.begin(), assimilators.end(), [&nexus](const sc2::Unit* assimilator) {
-                return sc2::DistanceSquared2D(assimilator->pos, nexus->pos) < 15.0f * 15.0f;
-            });
-
-            if (assimilators_count < min_assimilators_count) {
-                selected_nexus = nexus;
-                min_assimilators_count = assimilators_count;
-            }
-        }
-
-        const auto vespene_geysers = Observation()->GetUnits(sc2::Unit::Alliance::Neutral, [](const sc2::Unit& unit_) {
-            return  unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_VESPENEGEYSER ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_PROTOSSVESPENEGEYSER ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_PURIFIERVESPENEGEYSER ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_SHAKURASVESPENEGEYSER ||
-                    unit_.unit_type == sc2::UNIT_TYPEID::NEUTRAL_RICHVESPENEGEYSER;
+        const sc2::Unit* selected_nexus = Utilities::SelectUnitMin(nexus_units, [this, &assimilators](const sc2::Unit* nexus) {
+            return Utilities::CountWithinRange(assimilators, nexus->pos, 15.0f);
         });
 
-        const auto& closest_vespene_geyser = std::min_element(vespene_geysers.begin(), vespene_geysers.end(), [&selected_nexus](const sc2::Unit* a, const sc2::Unit* b) {
-            return sc2::DistanceSquared2D(a->pos, selected_nexus->pos) < sc2::DistanceSquared2D(b->pos, selected_nexus->pos);
-        });
+        const auto vespene_geysers = Utilities::GetResourcePoints(m_NeutralUnits, false, true, false);
 
-        if (closest_vespene_geyser == vespene_geysers.end()) {
+        if (vespene_geysers.empty()) {
             return sc2::Point2D(0.0f, 0.0f);
         }
 
-        return (*closest_vespene_geyser)->pos;
+        const auto* closest_vespene_geyser = Utilities::ClosestTo(vespene_geysers, selected_nexus->pos);
+
+        return closest_vespene_geyser->pos;
     }
 
-    bool all_in_progress = std::all_of(pylons.begin(), pylons.end(), [](const sc2::Unit* pylon) {
-        return pylon->build_progress < 1.0f;
-    });
+    bool all_in_progress = Utilities::AllInProgress(pylons);
 
     if (ability_id == sc2::ABILITY_ID::BUILD_GATEWAY) {
         // Build the Gateway at the closest ramp.
         const auto& nexus_units = GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
 
-        if (nexus_units.size() == 0) {
+        if (nexus_units.empty()) {
             return sc2::Point2D(0.0f, 0.0f);
         }
 
@@ -678,15 +451,15 @@ TrainResult Bot::GetIdealUnitProduction(sc2::ABILITY_ID ability_id)
     // Find possible training buildings, select one that is complete and has the least amount of queued orders.
     const auto training_buildings = GetUnits(training_building);
 
-    if (training_buildings.size() == 0) {
+    if (training_buildings.empty()) {
         return TrainResult(false);
     }
 
-    const auto& training_building_with_fewest_orders = std::min_element(training_buildings.begin(), training_buildings.end(), [this](const sc2::Unit* a, const sc2::Unit* b) {
-        return a->orders.size() < b->orders.size();
+    const auto training_building_with_fewest_orders = Utilities::SelectUnitMin(training_buildings, [this](const sc2::Unit* unit) {
+        return unit->orders.size();
     });
 
-    return TrainResult(true, ability_id, (*training_building_with_fewest_orders));
+    return TrainResult(true, ability_id, training_building_with_fewest_orders);
 }
 
 AbilityCost Bot::GetPlannedCosts()
@@ -716,7 +489,7 @@ float Bot::FromGameTimeSource(float time_)
     return time_ + ElapsedTime();
 }
 
-void Bot::CheckDelayedOrder(const sc2::Unit *unit_)
+void Bot::CheckDelayedOrder(const sc2::Unit *unit)
 {
     auto* actions = Actions();
     const auto* obs = Observation();
@@ -725,20 +498,20 @@ void Bot::CheckDelayedOrder(const sc2::Unit *unit_)
     const auto vespene = obs->GetVespene();
 
     // Check if the unit has a delayed order.
-    const auto& it = m_DelayedOrders.find(unit_->tag);
+    const auto& it = m_DelayedOrders.find(unit->tag);
 
     if (it == m_DelayedOrders.end()) {
-        m_CheckDelayedOrders.erase(unit_->tag);
+        m_CheckDelayedOrders.erase(unit->tag);
         return;
     }
 
-    if (m_OrdersExecuted.find(unit_->tag) != m_OrdersExecuted.end()) {
-        m_CheckDelayedOrders.erase(unit_->tag);
+    if (m_OrdersExecuted.find(unit->tag) != m_OrdersExecuted.end()) {
+        m_CheckDelayedOrders.erase(unit->tag);
         return;
     }
 
-    if (!unit_->build_progress == 1.0f) {
-        m_CheckDelayedOrders.emplace(unit_->tag);
+    if (!unit->build_progress == 1.0f) {
+        m_CheckDelayedOrders.emplace(unit->tag);
         return;
     }
 
@@ -746,7 +519,7 @@ void Bot::CheckDelayedOrder(const sc2::Unit *unit_)
 
     // Check if the time has passed.
     if (delayed_order.time > ElapsedTime()) {
-        m_CheckDelayedOrders.emplace(unit_->tag);
+        m_CheckDelayedOrders.emplace(unit->tag);
         return;
     }
 
@@ -754,7 +527,7 @@ void Bot::CheckDelayedOrder(const sc2::Unit *unit_)
 
     if (ability_cost != AbilityCosts.end()) {
         if (minerals < ability_cost->second.minerals || vespene < ability_cost->second.vespene) {
-            m_CheckDelayedOrders.emplace(unit_->tag);
+            m_CheckDelayedOrders.emplace(unit->tag);
             return;
         }
     }
@@ -762,80 +535,41 @@ void Bot::CheckDelayedOrder(const sc2::Unit *unit_)
     const auto& requirements = UnitRequirements.find(delayed_order.ability_id);
 
     if (requirements != UnitRequirements.end()) {
-        bool all_requirements_met = true;
         for (const auto& requirement : requirements->second) {
-            bool any_unit_found = false;
-
-            const auto& units = GetUnits(requirement);
-            for (const auto& unit : units) {
-                if (unit->build_progress == 1.0f) {
-                    any_unit_found = true;
-                    break;
-                }
-            }
-
-            if (any_unit_found) {
-                continue;
-            }
-            
-            all_requirements_met = false;
-
-            break;
-        }
-
-        if (!all_requirements_met) {
-            m_CheckDelayedOrders.emplace(unit_->tag);
-            return;
+            if (Utilities::AllInProgress(GetUnits(requirement))) {
+                m_CheckDelayedOrders.emplace(unit->tag);
+                return;
+            } 
         }
     }
 
     if (delayed_order.target_unit_tag == 0) {
-        std::cout << "Performing delayed order for " << sc2::UnitTypeToName(unit_->unit_type) << " with ability " 
+        std::cout << "Performing delayed order for " << sc2::UnitTypeToName(unit->unit_type) << " with ability " 
                 << sc2::AbilityTypeToName(delayed_order.ability_id) << " at position " << delayed_order.position.x << ", " << delayed_order.position.y << std::endl;
-        actions->UnitCommand(unit_, delayed_order.ability_id, delayed_order.position);
+        actions->UnitCommand(unit, delayed_order.ability_id, delayed_order.position);
     } else {
-        std::cout << "Performing delayed order for " << sc2::UnitTypeToName(unit_->unit_type) << " with ability " 
+        std::cout << "Performing delayed order for " << sc2::UnitTypeToName(unit->unit_type) << " with ability " 
                 << sc2::AbilityTypeToName(delayed_order.ability_id) << " at unit " << delayed_order.target_unit_tag << std::endl;
-        actions->UnitCommand(unit_, delayed_order.ability_id, delayed_order.target_unit_tag);
+        actions->UnitCommand(unit, delayed_order.ability_id, delayed_order.target_unit_tag);
     }
 
-    m_OrdersExecuted.emplace(unit_->tag);
+    m_OrdersExecuted.emplace(unit->tag);
 
-    m_CheckDelayedOrders.erase(unit_->tag);
+    m_CheckDelayedOrders.erase(unit->tag);
 
     return;
-}
-
-bool Bot::AnyWithingRange(const sc2::Units &units, const sc2::Point2D &point, float range)
-{
-    range *= range;
-
-    return std::any_of(units.begin(), units.end(), [&point, range](const sc2::Unit* unit) {
-        return sc2::DistanceSquared2D(unit->pos, point) < range;
-    });
-}
-
-sc2::Units Bot::WithinRange(const sc2::Units &units, const sc2::Point2D &point, float range)
-{
-    range *= range;
-
-    sc2::Units within_range;
-
-    std::copy_if(units.begin(), units.end(), std::back_inserter(within_range), [&point, range](const sc2::Unit* unit) {
-        return sc2::DistanceSquared2D(unit->pos, point) < range;
-    });
-
-    return within_range;
 }
 
 void Bot::UpdateStepData()
 {
     m_Units.clear();
 
-    // Get all friendly units.
-    const auto units = Observation()->GetUnits(sc2::Unit::Alliance::Self);
+    m_NeutralUnits = Observation()->GetUnits(sc2::Unit::Alliance::Neutral);
 
-    for (const auto& unit : units) {
+    // Get all friendly units.
+    m_AllUnits = Observation()->GetUnits(sc2::Unit::Alliance::Self);
+
+    for (const auto& unit : m_AllUnits) {
         const auto& type = unit->unit_type;
 
         const auto& iter = m_Units.find(type);
@@ -848,7 +582,7 @@ void Bot::UpdateStepData()
     }
 }
 
-const sc2::Units &Bot::GetUnits(sc2::UNIT_TYPEID unit_type_) const
+const sc2::Units& Bot::GetUnits(sc2::UNIT_TYPEID unit_type_) const
 {
     const auto& iter = m_Units.find(unit_type_);
 
@@ -929,65 +663,6 @@ sc2::Point2D Bot::GetClosestPlace(const sc2::Point2D &center, const sc2::Point2D
     }
 
     return closest_point;
-}
-
-std::pair<sc2::Point2D, float> Bot::GetBestPath(const sc2::Unit* unit, const sc2::Point2D &center, float min_radius, float max_radius, float step_size)
-{
-    auto* query = Query();
-
-    sc2::Point2D current_grid;
-
-    sc2::Point2D previous_grid;
-
-    int valid_queries = 0;
-
-    std::vector<sc2::QueryInterface::PathingQuery> queries;
-
-    for (float r = min_radius; r < max_radius; r += 1.0f)
-    {
-        float loc = 0.0f;
-
-        while (loc < 360.0f) {
-            sc2::Point2D point = sc2::Point2D((r * std::cos((loc * 3.1415927f) / 180.0f)) + center.x,
-                                    (r * std::sin((loc * 3.1415927f) / 180.0f)) + center.y);
-
-            current_grid = sc2::Point2D(std::floor(point.x), std::floor(point.y));
-
-            if (previous_grid != current_grid) {
-                sc2::QueryInterface::PathingQuery query{unit->tag, unit->pos, point};
-                queries.push_back(query);
-                ++valid_queries;
-            }
-
-            previous_grid = current_grid;
-            loc += step_size;
-        }
-    }
-
-    if (queries.size() == 0) {
-        return std::make_pair(center, 0.0f);
-    }
-
-    auto result = query->PathingDistance(queries);
-
-    // Find the shortest path.
-    auto best_path = center;
-    auto shortest_distance = std::numeric_limits<float>::max();
-
-    for (auto i = 0; i < result.size(); ++i) {
-        if (result[i] <= 0.0f) {
-            continue;
-        }
-
-        const auto& point = queries[i].end_;
-
-        if (result[i] < shortest_distance) {
-            best_path = point;
-            shortest_distance = result[i];
-        }
-    }
-
-    return std::make_pair(best_path, shortest_distance);
 }
 
 sc2::Point2D Bot::GetClosestPlace(const sc2::Point2D &center, const sc2::Point2D &pivot, const sc2::Units &pylons, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float step_size)
@@ -1309,6 +984,65 @@ sc2::Point2D Bot::GetBestCenter(const sc2::Units &units, sc2::ABILITY_ID ability
     return best_center;
 }
 
+std::pair<sc2::Point2D, float> Bot::GetBestPath(const sc2::Unit* unit, const sc2::Point2D &center, float min_radius, float max_radius, float step_size)
+{
+    auto* query = Query();
+
+    sc2::Point2D current_grid;
+
+    sc2::Point2D previous_grid;
+
+    int valid_queries = 0;
+
+    std::vector<sc2::QueryInterface::PathingQuery> queries;
+
+    for (float r = min_radius; r < max_radius; r += 1.0f)
+    {
+        float loc = 0.0f;
+
+        while (loc < 360.0f) {
+            sc2::Point2D point = sc2::Point2D((r * std::cos((loc * 3.1415927f) / 180.0f)) + center.x,
+                                    (r * std::sin((loc * 3.1415927f) / 180.0f)) + center.y);
+
+            current_grid = sc2::Point2D(std::floor(point.x), std::floor(point.y));
+
+            if (previous_grid != current_grid) {
+                sc2::QueryInterface::PathingQuery query{unit->tag, unit->pos, point};
+                queries.push_back(query);
+                ++valid_queries;
+            }
+
+            previous_grid = current_grid;
+            loc += step_size;
+        }
+    }
+
+    if (queries.size() == 0) {
+        return std::make_pair(center, 0.0f);
+    }
+
+    auto result = query->PathingDistance(queries);
+
+    // Find the shortest path.
+    auto best_path = center;
+    auto shortest_distance = std::numeric_limits<float>::max();
+
+    for (auto i = 0; i < result.size(); ++i) {
+        if (result[i] <= 0.0f) {
+            continue;
+        }
+
+        const auto& point = queries[i].end_;
+
+        if (result[i] < shortest_distance) {
+            best_path = point;
+            shortest_distance = result[i];
+        }
+    }
+
+    return std::make_pair(best_path, shortest_distance);
+}
+
 sc2::Point2D Bot::GetClosestRamp(const sc2::Point2D &center)
 {
     auto closest_ramp = m_Ramps[0].point;
@@ -1327,66 +1061,13 @@ sc2::Point2D Bot::GetClosestRamp(const sc2::Point2D &center)
     return closest_ramp;
 }
 
-bool Bot::AnyQueuedOrders(const sc2::Units &units, sc2::ABILITY_ID ability_id)
-{
-    for (const auto& unit : units) {
-        // Check delayed orders.
-        const auto& it = m_DelayedOrders.find(unit->tag);
-
-        if (it != m_DelayedOrders.end() && it->second.ability_id == ability_id) {
-            return true;
-        }
-
-        if (unit->orders.size() == 0) {
-            continue;
-        }
-        
-        for (const auto& order : unit->orders) {
-            if (order.ability_id == ability_id) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-bool Bot::AnyQueuedOrder(const sc2::Unit* unit, sc2::ABILITY_ID ability_id)
-{
-    for (const auto& order : unit->orders) {
-        if (order.ability_id == ability_id) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 bool Bot::AnyInProgress(const sc2::UNIT_TYPEID &unit_id)
 {
     const auto& units = GetUnits(unit_id);
 
     return std::any_of(units.begin(), units.end(), [](const sc2::Unit* unit) {
-        return unit->build_progress < 1.0f;
+        return Utilities::IsInProgress(unit);
     });
-}
-
-sc2::Units Bot::FilterOutInProgress(const sc2::Units &units)
-{
-    sc2::Units filtered;
-
-    for (const auto& unit : units) {
-        if (unit->build_progress == 1.0f) {
-            filtered.push_back(unit);
-        }
-    }
-
-    return filtered;
-}
-
-bool Bot::IsInProgress(const sc2::Unit *unit)
-{
-    return unit->build_progress < 1.0f;
 }
 
 sc2::Units Bot::RedistributeWorkers(const sc2::Unit *base, int32_t& workers_needed)
@@ -1929,7 +1610,7 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
 
         const auto& building_type = upgrade_building->second;
 
-        const auto& buildings = FilterOutInProgress(GetUnits(building_type));
+        const auto& buildings = Utilities::FilterOutInProgress(GetUnits(building_type));
 
         if (buildings.size() == 0) {
             return BuildResult(false);

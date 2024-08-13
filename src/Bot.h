@@ -61,21 +61,13 @@ private:
 
     BuildResult AttemptBuild(sc2::ABILITY_ID ability_id);
 
-    bool AnyQueuedOrders(const sc2::Units& units, sc2::ABILITY_ID ability_id);
-    bool AnyQueuedOrder(const sc2::Unit* unit, sc2::ABILITY_ID ability_id);
-
     bool AnyInProgress(const sc2::UNIT_TYPEID& unit_id);
-
-    sc2::Units FilterOutInProgress(const sc2::Units& units);
-    bool IsInProgress(const sc2::Unit* unit);
 
     void RedistributeWorkers(const sc2::Units& bases);
 
     sc2::Units RedistributeWorkers(const sc2::Unit* base, int32_t& workers_needed);
 
     void ReturnToMining(const sc2::Unit* probe);
-
-    bool IsMining(const sc2::Unit* probe);
 
     void FindRamps();
 
@@ -110,6 +102,8 @@ private:
     TrainResult GetIdealUnitProduction(sc2::ABILITY_ID ability_id);
 
     // Step-data
+    sc2::Units m_AllUnits;
+    sc2::Units m_NeutralUnits;
     std::unordered_map<sc2::UNIT_TYPEID, sc2::Units> m_Units;
 
     std::unordered_map<sc2::Tag, DelayedOrder> m_DelayedOrders;
@@ -124,13 +118,7 @@ private:
 
     float ElapsedTime();
 
-    float FromGameTimeSource(float time_);
-
     void CheckDelayedOrder(const sc2::Unit* unit_);
-
-    bool AnyWithingRange(const sc2::Units& units, const sc2::Point2D& point, float range);
-
-    sc2::Units WithinRange(const sc2::Units& units, const sc2::Point2D& point, float range);
 
     void UpdateStepData();
 

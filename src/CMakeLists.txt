@@ -6,6 +6,8 @@ set(bot_sources
     main.cpp
     Bot.cpp
     Data.cpp
+    Utilities.cpp
+    Map.cpp
     )
 
 add_executable(BlankBot ${bot_sources})
