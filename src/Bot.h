@@ -49,14 +49,6 @@ private:
     std::vector<Ramp> m_Ramps;
     std::vector<sc2::Point3D> m_Expansions;
 
-    sc2::Point2D GetClosestPlace(const sc2::Point2D& center, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float step_size = 45.0f);
-    sc2::Point2D GetClosestPlace(const sc2::Point2D& center, const sc2::Point2D& pivot, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float step_size = 45.0f);
-    sc2::Point2D GetClosestPlace(const sc2::Point2D& center, const sc2::Point2D& pivot, const sc2::Units& pylons, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float step_size = 45.0f);
-    sc2::Point2D GetClosestPlace(const sc2::Point2D& pivot, const sc2::Units& pylons, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float step_size = 45.0f);
-    sc2::Point2D GetClosestPlaceWhileAvoiding(const sc2::Point2D& center, const sc2::Point2D& pivot, const sc2::Units& avoid, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float avoid_radius, bool prefer_distance, float step_size = 45.0f);
-    sc2::Point2D GetBestCenter(const sc2::Units& units, sc2::ABILITY_ID ability_id, float min_radius, float max_radius, float benchmark_radius, float step_size = 45.0f);
-    std::pair<sc2::Point2D, float> GetBestPath(const sc2::Unit* unit, const sc2::Point2D& center, float min_radius, float max_radius, float step_size = 45.0f);
-
     sc2::Point2D GetClosestRamp(const sc2::Point2D& center);
 
     BuildResult AttemptBuild(sc2::ABILITY_ID ability_id);

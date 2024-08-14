@@ -45,6 +45,33 @@ bool HasQueuedOrder(const sc2::Unit* unit, sc2::ABILITY_ID ability_id, sc2::Tag 
 bool HasQueuedOrder(const sc2::Units& units, sc2::ABILITY_ID ability_id, sc2::Tag target_unit_tag);
 
 /**
+ * @brief Checks if a unit has any order (current or queued) with the target unit tag.
+ * 
+ * @param unit The unit to check.
+ * @param target_unit_tag The target unit tag to check for.
+ * @return true If the unit has an order with the given target unit tag, false otherwise.
+ */
+bool HasQueuedOrder(const sc2::Unit* unit, sc2::Tag target_unit_tag);
+
+/**
+ * @brief Checks if any one unit in a set has any order (current or queued) with the target unit tag.
+ * 
+ * @param units The set of units to check.
+ * @param target_unit_tag The target unit tag to check for.
+ * @return true If any unit in the set has an order with the given target unit tag, false otherwise.
+ */
+bool HasQueuedOrder(const sc2::Units& units, sc2::Tag target_unit_tag);
+
+/**
+ * @brief Return the unit with the lowest amount of orders out of a set.
+ * 
+ * @param units The set of units to check.
+ * @return The unit with the lowest amount of orders.
+ * @note This function does not account for the order progress.
+ */
+const sc2::Unit* LeastBusy(const sc2::Units& units);
+
+/**
  * @brief Checks if a unit is in progress (currently being built/trained).
  * 
  * @param unit The unit to check.
@@ -95,6 +122,16 @@ bool IsGathering(const sc2::Unit* unit);
  * @note This function is only applicable to workers, all other units will return false.
  */
 bool IsGatheringFrom(const sc2::Unit* unit, const sc2::Units& points);
+
+/**
+ * @brief Check if a unit is gathering from a point.
+ * 
+ * @param unit The unit to check.
+ * @param point The mineral field to check against.
+ * @return true If the unit is gathering from a point, false otherwise.
+ * @note This function is only applicable to workers, all other units will return false.
+ */
+bool IsGatheringFrom(const sc2::Unit* unit, const sc2::Unit* point);
 
 /**
  * @brief Check if a unit is idle.
@@ -215,6 +252,15 @@ uint64_t CountWithinRange(const sc2::Units& units, const sc2::Point2D& point, fl
 const sc2::Unit* ClosestTo(const sc2::Units& units, const sc2::Point2D& point);
 
 /**
+ * @brief Return the distance to the closest unit to a point.
+ * 
+ * @param units The set of units to check.
+ * @param point The point to check against.
+ * @return The distance to the closest unit to the point.
+ */
+float DistanceToClosest(const sc2::Units& units, const sc2::Point2D& point);
+
+/**
  * @brief Return the closest point to a point.
  * 
  * @param points The set of points to check.
@@ -237,7 +283,7 @@ const sc2::Point3D ClosestTo(const std::vector<sc2::Point3D>& points, const sc2:
  * @param predicate The predicate to check against.
  * @return The best unit based on the predicate.
  */
-const sc2::Unit* SelectUnit(const sc2::Units& units, std::function<float()> predicate);
+const sc2::Unit* SelectUnit(const sc2::Units& units, std::function<bool(const sc2::Unit*, const sc2::Unit*)> predicate);
 
 /**
  * @brief Return the best unit based on a predicate.
@@ -246,7 +292,7 @@ const sc2::Unit* SelectUnit(const sc2::Units& units, std::function<float()> pred
  * @param predicate The predicate to check against.
  * @return The best unit based on the predicate.
  */
-const sc2::Unit* SelectUnitMin(const sc2::Units& units, std::function<float()> predicate);
+const sc2::Unit* SelectUnitMin(const sc2::Units& units, std::function<float(const sc2::Unit*)> predicate);
 
 /**
  * @brief Return the best unit based on a predicate.
@@ -255,7 +301,7 @@ const sc2::Unit* SelectUnitMin(const sc2::Units& units, std::function<float()> p
  * @param predicate The predicate to check against.
  * @return The best unit based on the predicate.
  */
-const sc2::Unit* SelectUnitMax(const sc2::Units& units, std::function<bool(const sc2::Unit*, float)> predicate);
+const sc2::Unit* SelectUnitMax(const sc2::Units& units, std::function<float(const sc2::Unit*)> predicate);
 
 /**
  * @brief Return the unit with the closest average distance to a set of other units.

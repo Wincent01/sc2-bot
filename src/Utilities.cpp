@@ -47,7 +47,47 @@ bool scbot::Utilities::HasQueuedOrder(const sc2::Units& units, sc2::ABILITY_ID a
     return false;
 }
 
-bool scbot::Utilities::IsInProgress(const sc2::Unit* unit) {
+bool scbot::Utilities::HasQueuedOrder(const sc2::Unit* unit, sc2::Tag target_unit_tag) {
+    NON_NULL(unit);
+
+    for (const auto& order : unit->orders) {
+        if (order.target_unit_tag == target_unit_tag) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool scbot::Utilities::HasQueuedOrder(const sc2::Units& units, sc2::Tag target_unit_tag) {
+    for (const auto& unit : units) {
+        if (HasQueuedOrder(unit, target_unit_tag)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+const sc2::Unit* scbot::Utilities::LeastBusy(const sc2::Units& units)
+{
+    NON_EMPTY(units);
+
+    const sc2::Unit* least_busy = nullptr;
+    uint32_t least_orders = std::numeric_limits<uint32_t>::max();
+
+    for (const auto& unit : units) {
+        if (unit->orders.size() < least_orders) {
+            least_busy = unit;
+            least_orders = unit->orders.size();
+        }
+    }
+
+    return least_busy;
+}
+
+bool scbot::Utilities::IsInProgress(const sc2::Unit *unit)
+{
     NON_NULL(unit);
     
     return unit->build_progress < 1.0f;
@@ -107,7 +147,25 @@ bool scbot::Utilities::IsGatheringFrom(const sc2::Unit* unit, const sc2::Units& 
     return false;
 }
 
-bool scbot::Utilities::IsIdle(const sc2::Unit* unit) {
+bool scbot::Utilities::IsGatheringFrom(const sc2::Unit* unit, const sc2::Unit* point) {
+    NON_NULL(unit);
+    NON_NULL(point);
+
+    for (const auto& order : unit->orders) {
+        if (scdata::MiningAbilities.find(order.ability_id) == scdata::MiningAbilities.end()) {
+            continue;
+        }
+
+        if (point->tag == order.target_unit_tag) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool scbot::Utilities::IsIdle(const sc2::Unit* unit)
+{
     NON_NULL(unit);
 
     return unit->orders.empty();
@@ -251,7 +309,23 @@ const sc2::Unit* scbot::Utilities::ClosestTo(const sc2::Units& units, const sc2:
     return closest_unit;
 }
 
-const sc2::Point2D scbot::Utilities::ClosestTo(const std::vector<sc2::Point2D>& points, const sc2::Point2D& point) {
+float scbot::Utilities::DistanceToClosest(const sc2::Units& units, const sc2::Point2D& point) {
+    NON_EMPTY(units);
+
+    float closest_distance = std::numeric_limits<float>::max();
+
+    for (const auto& unit : units) {
+        float distance = sc2::DistanceSquared2D(unit->pos, point);
+        if (distance < closest_distance) {
+            closest_distance = distance;
+        }
+    }
+
+    return std::sqrt(closest_distance);
+}
+
+const sc2::Point2D scbot::Utilities::ClosestTo(const std::vector<sc2::Point2D>& points, const sc2::Point2D& point)
+{
     NON_EMPTY(points);
     
     sc2::Point2D closest_point;
@@ -293,7 +367,7 @@ const sc2::Unit* scbot::Utilities::SelectUnit(const sc2::Units& units, std::func
     return it != units.end() ? *it : nullptr;
 }
 
-const sc2::Unit* scbot::Utilities::SelectUnitMin(const sc2::Units& units, std::function<float()> predicate) {
+const sc2::Unit* scbot::Utilities::SelectUnitMin(const sc2::Units& units, std::function<float(const sc2::Unit*)> predicate) {
     NON_EMPTY(units);
     
     const sc2::Unit* best_unit = nullptr;
@@ -311,7 +385,7 @@ const sc2::Unit* scbot::Utilities::SelectUnitMin(const sc2::Units& units, std::f
     return best_unit;
 }
 
-const sc2::Unit* scbot::Utilities::SelectUnitMax(const sc2::Units& units, std::function<float()> predicate) {
+const sc2::Unit* scbot::Utilities::SelectUnitMax(const sc2::Units& units, std::function<float(const sc2::Unit*)> predicate) {
     NON_EMPTY(units);
 
     const sc2::Unit* best_unit = nullptr;
