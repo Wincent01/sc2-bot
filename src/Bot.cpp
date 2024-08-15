@@ -114,7 +114,7 @@ void Bot::OnStep()
         CheckDelayedOrder(unit);
     }
 
-    if (nexus_units.size() == 0) {
+    if (nexus_units.empty()) {
         AttemptBuild(sc2::ABILITY_ID::BUILD_NEXUS);
         return;
     }
@@ -300,16 +300,16 @@ sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
 
     if (ability_id == sc2::ABILITY_ID::BUILD_NEXUS) {
         // Build the Nexus at the closest expansion, or the closest one to a probe if we don't have a base.
-        if (m_Expansions.size() == 0) {
+        if (m_Expansions.empty()) {
             return sc2::Point2D(0.0f, 0.0f);
         }
 
         const auto& nexus_units = GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
 
-        if (nexus_units.size() == 0) {
+        if (nexus_units.empty()) {
             const auto& probes = GetUnits(sc2::UNIT_TYPEID::PROTOSS_PROBE);
 
-            if (probes.size() == 0) {
+            if (probes.empty()) {
                 return sc2::Point2D(0.0f, 0.0f);
             }
 
@@ -421,7 +421,7 @@ sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
         // Build the Cybernetics Core at the closest ramp.
         const auto& nexus_units = GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
 
-        if (nexus_units.size() == 0) {
+        if (nexus_units.empty()) {
             return sc2::Point2D(0.0f, 0.0f);
         }
 
@@ -681,7 +681,7 @@ sc2::Units Bot::RedistributeWorkers(const sc2::Unit *base, int32_t& workers_need
                 }
 
                 // Make sure it's targeting a mineral field.
-                if (probe->orders.size() == 0) {
+                if (probe->orders.empty()) {
                     continue;
                 }
                 
@@ -875,7 +875,7 @@ void Bot::RedistributeWorkers(const sc2::Units &bases)
     const auto& probes = GetUnits(sc2::UNIT_TYPEID::PROTOSS_PROBE);
 
     for (const auto* probe : probes) {
-        if (probe->orders.size() == 0) {
+        if (probe->orders.empty()) {
             ReturnToMining(probe);
         }
     }
@@ -925,7 +925,7 @@ void Bot::RedistributeWorkers(const sc2::Units &bases)
             const auto excess_size = excess.size();
 
             for (int i = 0; i < workers_needed->second; ++i) {
-                if (excess.size() == 0) {
+                if (excess.empty()) {
                     break;
                 }
 
