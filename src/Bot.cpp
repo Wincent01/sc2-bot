@@ -29,9 +29,6 @@
 
 using namespace scbot;
 
-#define PROBE_RANGE 10.0f
-#define PROBE_RANGE_SQUARED PROBE_RANGE * PROBE_RANGE
-
 struct build_request {
     sc2::ABILITY_ID ability_id;
     const sc2::Unit* target;
@@ -42,8 +39,11 @@ void Bot::OnGameStart()
 {
     std::cout << "New game started!" << std::endl;
 
-    FindRamps();
-    FindExpansions();
+    m_Collective = std::make_shared<Collective>(this);
+    m_Proletariat = std::make_shared<Proletariat>(m_Collective);
+
+    m_Ramps = Map::FindRamps(Query(), Observation());
+    m_Expansions = sc2::search::CalculateExpansionLocations(Observation(), Query());
 
     m_NextBuildDispatch = 0;
 }
@@ -69,12 +69,12 @@ void Bot::OnStep()
     auto* query = Query();
     auto* debug = Debug();
 
-    UpdateStepData();
+    m_Collective->OnStep();
 
-    const auto& nexus_units = GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
-    const auto& probes = GetUnits(sc2::UNIT_TYPEID::PROTOSS_PROBE);
+    const auto& nexus_units = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
+    const auto& probes = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_PROBE);
 
-    float time_in_seconds = obs->GetGameLoop() / 22.4f;
+    float time_in_seconds = ElapsedTime();
 
     m_Resources = { 
         static_cast<int32_t>(obs->GetMinerals()),
@@ -82,7 +82,7 @@ void Bot::OnStep()
     };
 
     if (obs->GetGameLoop() % 50 == 0) {
-        RedistributeWorkers(nexus_units);
+        m_Proletariat->RedistributeWorkers();
     }
 
     const auto check_copy = m_CheckDelayedOrders;
@@ -211,7 +211,7 @@ void Bot::OnUnitIdle(const sc2::Unit* unit)
 
     // If the unit is a probe, send it to mine minerals or gas.
     if (Utilities::IsWorker(unit)) {
-        ReturnToMining(unit);
+        m_Proletariat->ReturnToMining(unit);
     }
 }
 
@@ -281,11 +281,6 @@ void Bot::OnError(const std::vector<sc2::ClientError>& client_errors,
         std::cerr << "Encountered protocol error: " << i << std::endl;
 }
 
-void Bot::FindExpansions()
-{
-    m_Expansions = sc2::search::CalculateExpansionLocations(Observation(), Query());
-}
-
 sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
 {
     const auto* obs = Observation();
@@ -304,10 +299,10 @@ sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
             return sc2::Point2D(0.0f, 0.0f);
         }
 
-        const auto& nexus_units = GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
+        const auto& nexus_units = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
 
         if (nexus_units.empty()) {
-            const auto& probes = GetUnits(sc2::UNIT_TYPEID::PROTOSS_PROBE);
+            const auto& probes = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_PROBE);
 
             if (probes.empty()) {
                 return sc2::Point2D(0.0f, 0.0f);
@@ -325,11 +320,11 @@ sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
         return closest_expansion;
     }
 
-    const auto& pylons = GetUnits(sc2::UNIT_TYPEID::PROTOSS_PYLON);
+    const auto& pylons = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_PYLON);
 
     if (ability_id == sc2::ABILITY_ID::BUILD_PYLON) {
         // Build the Pylon at the closest ramp.
-        const auto& nexus_units = GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
+        const auto& nexus_units = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
 
         if (nexus_units.empty()) {
             return sc2::Point2D(0.0f, 0.0f);
@@ -365,13 +360,13 @@ sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
 
     if (ability_id == sc2::ABILITY_ID::BUILD_ASSIMILATOR) {
         // Build the Assimilator at the closest vespene geyser.
-        const auto nexus_units = GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
+        const auto nexus_units = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
 
         if (nexus_units.empty()) {
             return sc2::Point2D(0.0f, 0.0f);
         }
 
-        const auto& assimilators = GetUnits(sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR);
+        const auto& assimilators = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR);
         
         // Select a Nexus that has less than 2 assimilators within 15 units of it.
         const sc2::Unit* selected_nexus = Utilities::SelectUnitMin(nexus_units, [this, &assimilators](const sc2::Unit* nexus) {
@@ -393,7 +388,7 @@ sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
 
     if (ability_id == sc2::ABILITY_ID::BUILD_GATEWAY) {
         // Build the Gateway at the closest ramp.
-        const auto& nexus_units = GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
+        const auto& nexus_units = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
 
         if (nexus_units.empty()) {
             return sc2::Point2D(0.0f, 0.0f);
@@ -404,7 +399,7 @@ sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
         const auto& ramp = GetClosestRamp(closest_nexus->pos);
 
         // Check if there already is a Gateway at the ramp.
-        const auto& gateways = GetUnits(sc2::UNIT_TYPEID::PROTOSS_GATEWAY);
+        const auto& gateways = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_GATEWAY);
 
         if (Utilities::AnyWithinRange(gateways, ramp, 8.0f)) {
             return Map::GetClosestPlace(Query(), closest_nexus->pos, pylons, ability_id, 0.0f, 5.0f);
@@ -419,7 +414,7 @@ sc2::Point2D Bot::GetIdealPosition(sc2::ABILITY_ID ability_id)
 
     if (ability_id == sc2::ABILITY_ID::BUILD_CYBERNETICSCORE) {
         // Build the Cybernetics Core at the closest ramp.
-        const auto& nexus_units = GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
+        const auto& nexus_units = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
 
         if (nexus_units.empty()) {
             return sc2::Point2D(0.0f, 0.0f);
@@ -450,7 +445,7 @@ TrainResult Bot::GetIdealUnitProduction(sc2::ABILITY_ID ability_id)
     const auto& training_building = training_building_it->second;
 
     // Find possible training buildings, select one that is complete and has the least amount of queued orders.
-    const auto training_buildings = GetUnits(training_building);
+    const auto training_buildings = m_Collective->GetAlliedUnitsOfType(training_building);
 
     if (training_buildings.empty()) {
         return TrainResult(false);
@@ -478,9 +473,7 @@ AbilityCost Bot::GetPlannedCosts()
 
 float Bot::ElapsedTime()
 {
-    auto* obs = Observation();
-
-    return obs->GetGameLoop() / 22.4f;
+    return Utilities::ToSecondsFromGameTime(Observation()->GetGameLoop());
 }
 
 void Bot::CheckDelayedOrder(const sc2::Unit *unit)
@@ -504,7 +497,7 @@ void Bot::CheckDelayedOrder(const sc2::Unit *unit)
         return;
     }
 
-    if (!unit->build_progress == 1.0f) {
+    if (Utilities::IsInProgress(unit)) {
         m_CheckDelayedOrders.emplace(unit->tag);
         return;
     }
@@ -530,7 +523,7 @@ void Bot::CheckDelayedOrder(const sc2::Unit *unit)
 
     if (requirements != UnitRequirements.end()) {
         for (const auto& requirement : requirements->second) {
-            if (Utilities::AllInProgress(GetUnits(requirement))) {
+            if (Utilities::AllInProgress(m_Collective->GetAlliedUnitsOfType(requirement))) {
                 m_CheckDelayedOrders.emplace(unit->tag);
                 return;
             } 
@@ -554,40 +547,6 @@ void Bot::CheckDelayedOrder(const sc2::Unit *unit)
     return;
 }
 
-void Bot::UpdateStepData()
-{
-    m_Units.clear();
-
-    m_NeutralUnits = Observation()->GetUnits(sc2::Unit::Alliance::Neutral);
-
-    // Get all friendly units.
-    m_AllUnits = Observation()->GetUnits(sc2::Unit::Alliance::Self);
-
-    for (const auto& unit : m_AllUnits) {
-        const auto& type = unit->unit_type;
-
-        const auto& iter = m_Units.find(type);
-
-        if (iter == m_Units.end()) {
-            m_Units.emplace(type, sc2::Units{unit});
-        } else {
-            iter->second.push_back(unit);
-        }
-    }
-}
-
-const sc2::Units& Bot::GetUnits(sc2::UNIT_TYPEID unit_type_) const
-{
-    const auto& iter = m_Units.find(unit_type_);
-
-    if (iter == m_Units.end()) {
-        static sc2::Units empty;
-        return empty;
-    }
-
-    return iter->second;
-}
-
 sc2::Point2D Bot::GetClosestRamp(const sc2::Point2D &center)
 {
     const auto& closest = std::min_element(m_Ramps.begin(), m_Ramps.end(), [center](const auto& a, const auto& b) {
@@ -599,349 +558,17 @@ sc2::Point2D Bot::GetClosestRamp(const sc2::Point2D &center)
 
 bool Bot::AnyInProgress(const sc2::UNIT_TYPEID &unit_id)
 {
-    const auto& units = GetUnits(unit_id);
+    const auto& units = m_Collective->GetAlliedUnitsOfType(unit_id);
 
     return std::any_of(units.begin(), units.end(), [](const sc2::Unit* unit) {
         return Utilities::IsInProgress(unit);
     });
 }
 
-sc2::Units Bot::RedistributeWorkers(const sc2::Unit *base, int32_t& workers_needed)
-{
-    auto* actions = Actions();
-    const auto* obs = Observation();
-
-    auto points = Utilities::WithinRange(
-        Utilities::GetResourcePoints(m_NeutralUnits, true, false, true),
-        base->pos,
-        15.0f
-    );
-
-    auto probes = Utilities::WithinRange(
-        GetUnits(sc2::UNIT_TYPEID::PROTOSS_PROBE),
-        base->pos,
-        15.0f
-    );
-
-    const auto num_workers = probes.size();
-
-    std::unordered_set<const sc2::Unit*> assigned_workers;
-
-    workers_needed = 0;
-    uint32_t mineral_points = 0;
-
-    for (const auto& point : points) {
-        if (Utilities::IsDepleted(point)) {
-            continue;
-        }
-
-        if (!Utilities::IsExtractor(point)) {
-
-            workers_needed += 2;
-            ++mineral_points;
-            continue;
-        }
-
-        if (Utilities::IsInProgress(point)) {
-            continue;
-        }
-
-        workers_needed += 3;
-
-        if (assigned_workers.size() == num_workers) {
-            continue;
-        }
-
-        // Find the amount of workers on this point.
-        sc2::Units workers;
-
-        for (const auto& probe : probes) {
-            if (Utilities::HasQueuedOrder(probe, point->tag)) {
-                assigned_workers.emplace(probe);
-                workers.push_back(probe);
-            }
-        }
-
-        const auto num_workers_on_point = workers.size();
-
-        const auto num_workers_needed = 3 - num_workers_on_point;
-
-        if (num_workers_needed <= 0) {
-            continue;
-        }
-        
-        while (num_workers_needed > 0) {
-            // Find the closest non-assigned worker.
-            const sc2::Unit* closest_worker = nullptr;
-            float closest_distance = std::numeric_limits<float>::max();
-
-            for (const auto& probe : probes) {
-                if (assigned_workers.find(probe) != assigned_workers.end()) {
-                    continue;
-                }
-
-                // Make sure it's targeting a mineral field.
-                if (probe->orders.empty()) {
-                    continue;
-                }
-                
-                bool found = false;
-
-                for (const auto& order : probe->orders) {
-                    for (const auto& point : points) {
-                        if (point->unit_type == sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR) {
-                            continue;
-                        }
-
-                        if (order.target_unit_tag == point->tag) {
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (found) {
-                    continue;
-                }
-
-                const auto distance = sc2::DistanceSquared2D(probe->pos, point->pos);
-
-                if (distance < closest_distance) {
-                    closest_worker = probe;
-                    closest_distance = distance;
-                }
-            }
-
-            if (closest_worker == nullptr) {
-                break;
-            }
-
-            actions->UnitCommand(closest_worker, sc2::ABILITY_ID::HARVEST_GATHER, point);      
-
-            assigned_workers.emplace(closest_worker);      
-        }
-    }
-
-    // Assign the rest of the workers until we have (mineral points * 2) workers.
-    for (const auto& probe : probes) {
-        if (assigned_workers.find(probe) != assigned_workers.end()) {
-            continue;
-        }
-
-        if (mineral_points * 2 == assigned_workers.size()) {
-            break;
-        }
-
-        assigned_workers.emplace(probe);
-
-        // If the probe is not already mining, assign it to the closest mineral field.
-        if (!Utilities::HasQueuedOrder(probe, sc2::ABILITY_ID::HARVEST_RETURN)) {
-            bool targeting_assimilator = false;
-
-            for (const auto& order : probe->orders) {
-                if (order.ability_id == sc2::ABILITY_ID::HARVEST_GATHER) {
-                    for (const auto& point : points) {
-                        if (point->unit_type == sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR && order.target_unit_tag == point->tag) {
-                            targeting_assimilator = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (!targeting_assimilator) {
-                continue;
-            }
-        }
-
-        const sc2::Unit* closest_point = nullptr;
-        float closest_distance = std::numeric_limits<float>::max();
-
-        for (const auto& point : points) {
-            if (point->unit_type == sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR) {
-                continue;
-            }
-
-            // Count the number of workers on this point.
-            int32_t num_workers_on_point = std::count_if(probes.begin(), probes.end(), [&point](const sc2::Unit* probe) {
-                for (const auto& order : probe->orders) {
-                    if (MiningAbilities.find(order.ability_id) != MiningAbilities.end() && order.target_unit_tag == point->tag) {
-                        return true;
-                    }
-                }
-
-                return false;
-            });
-
-            if (num_workers_on_point >= 2) {
-                continue;
-            }
-
-            const auto distance = sc2::DistanceSquared2D(probe->pos, point->pos);
-
-            if (distance < closest_distance) {
-                closest_point = point;
-                closest_distance = distance;
-            }
-        }
-
-        if (closest_point == nullptr) {
-            continue;
-        }
-
-        actions->UnitCommand(probe, sc2::ABILITY_ID::HARVEST_GATHER, closest_point, true);
-    }
-
-    workers_needed -= assigned_workers.size();
-
-    workers_needed = std::max(0, workers_needed);
-
-    // Return units not assigned to any point.
-    sc2::Units excess_workers;
-
-    for (const auto& probe : probes) {
-        if (assigned_workers.find(probe) == assigned_workers.end()) {
-            excess_workers.push_back(probe);
-        }
-    }
-
-    return excess_workers;
-}
-
-void Bot::ReturnToMining(const sc2::Unit *probe)
-{
-    if (probe->unit_type != sc2::UNIT_TYPEID::PROTOSS_PROBE) {
-        return;
-    }
-
-    const auto mining_points = Utilities::GetResourcePoints(m_NeutralUnits, true, false, true);
-
-    const auto& probes = GetUnits(sc2::UNIT_TYPEID::PROTOSS_PROBE);
-    const auto& nexus_units = Utilities::FilterOutInProgress(GetUnits(sc2::UNIT_TYPEID::PROTOSS_NEXUS));
-
-    // Find the closest:
-    // * Mining point withing 15 units of a Nexus;
-    // * That has less than 2 probes mining it (3 for gas);
-    // * and that is not already being mined by a probe.
-    
-    const sc2::Unit* closest_mining_point = nullptr;
-    float closest_distance = std::numeric_limits<float>::max();
-
-    // Start by filtering out the mining points that are not within 15 units of a Nexus or have sufficient probes mining them.
-    for (const auto& mining_point : mining_points) {
-        float closest_nexus_distance = Utilities::DistanceToClosest(nexus_units, mining_point->pos);
-
-        if (closest_nexus_distance > PROBE_RANGE) {
-            continue;
-        }
-
-        const auto num_gas_probes = std::count_if(probes.begin(), probes.end(), [&mining_point](const sc2::Unit* probe) {
-            return Utilities::IsGatheringFrom(probe, mining_point);
-        });
-
-        if (Utilities::IsExtractor(mining_point)) {
-            if (num_gas_probes >= 3) {
-                continue;
-            }
-        } else {
-            if (num_gas_probes >= 2) {
-                continue;
-            }
-        }
-
-        const auto distance = sc2::DistanceSquared2D(probe->pos, mining_point->pos);
-
-        if (distance < closest_distance) {
-            closest_distance = distance;
-            closest_mining_point = mining_point;
-        }
-    }
-
-    if (closest_mining_point == nullptr) {
-        return;
-    }
-
-    auto* actions = Actions();
-
-    actions->UnitCommand(probe, sc2::ABILITY_ID::HARVEST_GATHER, closest_mining_point);
-}
-
-void Bot::RedistributeWorkers(const sc2::Units &bases)
-{
-    std::unordered_map<const sc2::Unit*, int32_t> workers_needed_map;
-    std::unordered_map<const sc2::Unit*, sc2::Units> excess_workers_map;
-
-    // Find all idle probes
-    const auto& probes = GetUnits(sc2::UNIT_TYPEID::PROTOSS_PROBE);
-
-    for (const auto* probe : probes) {
-        if (probe->orders.empty()) {
-            ReturnToMining(probe);
-        }
-    }
-
-    for (const auto& base : bases) {
-        if (base->build_progress < 0.9f) {
-            continue;
-        }
-
-        int32_t workers_needed = 0;
-        const auto& excess_workers = RedistributeWorkers(base, workers_needed);
-
-        workers_needed_map.emplace(base, workers_needed);
-        excess_workers_map.emplace(base, excess_workers);
-    }
-
-    // Redistribute excess workers, move them to the base that is closest to the base that can give away workers.
-    for (const auto& base : bases) {
-        const auto& excess_workers = excess_workers_map.find(base);
-
-        if (excess_workers == excess_workers_map.end()) {
-            continue;
-        }
-
-        auto excess = excess_workers->second;
-
-        if (excess.empty()) {
-            continue;
-        }
-
-        // Give away excess workers.
-        for (const auto& other_base : bases) {
-            if (other_base == base) {
-                continue;
-            }
-
-            const auto& workers_needed = workers_needed_map.find(other_base);
-
-            if (workers_needed == workers_needed_map.end()) {
-                continue;
-            }
-
-            if (workers_needed->second <= 0) {
-                continue;
-            }
-
-            const auto excess_size = excess.size();
-
-            for (int i = 0; i < workers_needed->second; ++i) {
-                if (excess.empty()) {
-                    break;
-                }
-
-                const auto& worker = excess.back();
-
-                Actions()->UnitCommand(worker, sc2::ABILITY_ID::MOVE_MOVE, other_base->pos);
-
-                excess.pop_back();
-            }
-        }
-    }
-}
-
 BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
 {
     const auto* obs = Observation();
+    auto* actions = Actions();
 
     const auto& requirements = UnitRequirements.find(ability_id);
 
@@ -958,24 +585,23 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
     for (const auto& requirement : required_units) {
         bool found = false;
         float max_time_left = 0.0f;
-        const auto& units = GetUnits(requirement);
+        const auto& units = m_Collective->GetAlliedUnitsOfType(requirement);
         for (const auto& unit : units) {
-            if (unit->unit_type == requirement) {
-                if (!Utilities::IsInProgress(unit)) {
-                    found = true;
-                    break;
-                }
-                
-                auto build_time = Utilities::ToSecondsFromGameTime(obs->GetUnitTypeData().at(unit->unit_type).build_time);
+            if (unit->unit_type != requirement) {
+                continue;
+            }
+            
+            if (!Utilities::IsInProgress(unit)) {
+                found = true;
+                break;
+            }
+            
+            auto build_time = Utilities::ToSecondsFromGameTime(obs->GetUnitTypeData().at(unit->unit_type).build_time);
 
-                // Round up to the nearest second.
-                //build_time = std::ceil(build_time);
+            const auto time_left = (1.0f - unit->build_progress) * build_time;
 
-                const auto time_left = (1.0f - unit->build_progress) * build_time;
-
-                if (time_left > max_time_left) {
-                    max_time_left = time_left;
-                }
+            if (time_left > max_time_left) {
+                max_time_left = time_left;
             }
         }
 
@@ -998,36 +624,9 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
     }
 
     // Get the closest probe to the ideal position.
-    const auto& probes = GetUnits(sc2::UNIT_TYPEID::PROTOSS_PROBE);
+    const auto& probes = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_PROBE);
 
     // Select the subset that are either idle or are gathering minerals.
-    sc2::Units subset = {};
-    uint32_t num_mineral_probes = 0;
-    uint32_t num_gas_probes = 0;
-
-    for (const auto& probe : probes) {
-        if (Utilities::IsIdle(probe)) {
-            subset.push_back(probe);
-            continue;
-        }
-
-        if (!Utilities::IsGathering(probe)) {
-            continue;
-        }
-
-        subset.push_back(probe);
-        
-        const auto& order = probe->orders[0];
-
-        const auto target = obs->GetUnit(order.target_unit_tag);
-
-        if (target != nullptr && target->unit_type == sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR) {
-            num_gas_probes++;
-        } else {
-            num_mineral_probes++;
-        }
-    }
-
     const auto& cost_iter = AbilityCosts.find(ability_id);
 
     if (cost_iter == AbilityCosts.end()) {
@@ -1037,9 +636,7 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
     const auto& cost = cost_iter->second;
 
     if (m_Resources < cost) {
-        // Assume each probe can gather 1 mineral per second.
-        const float mineral_rate = num_mineral_probes * 1.15f;
-        const float vespene_rate = num_gas_probes * 1.15f;
+        const auto& [mineral_rate, vespene_rate] = m_Proletariat->GetIncomePerSecond();
 
         const float mineral_time = (cost.minerals - m_Resources.minerals) / mineral_rate;
         const float vespene_time = (cost.vespene - m_Resources.vespene) / vespene_rate;
@@ -1062,7 +659,7 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
 
         if (approx_time_left_on_requirements == 0.0f) {
             // Train the unit.
-            Actions()->UnitCommand(ideal_production.building, ability_id);
+            actions->UnitCommand(ideal_production.building, ability_id);
 
             return BuildResult(true, 0.0f, cost);
         }
@@ -1089,7 +686,7 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
 
         const auto& building_type = upgrade_building->second;
 
-        const auto& buildings = Utilities::FilterOutInProgress(GetUnits(building_type));
+        const auto& buildings = Utilities::FilterOutInProgress(m_Collective->GetAlliedUnitsOfType(building_type));
 
         if (buildings.empty()) {
             return BuildResult(false);
@@ -1099,7 +696,7 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
         
         if (approx_time_left_on_requirements == 0.0f) {
             // Upgrade the building.
-            Actions()->UnitCommand(building, ability_id);
+            actions->UnitCommand(building, ability_id);
 
             return BuildResult(true, 0.0f, cost);
         }
@@ -1125,7 +722,7 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
         return BuildResult(false);
     }
 
-    const auto* probe = Utilities::ClosestTo(subset, ideal_position);
+    const auto* probe = m_Proletariat->GetWorkerForBuilding(ideal_position);
 
     const auto movePosition = Map::GetBestPath(
         Query(),
@@ -1139,9 +736,6 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
     const auto& unit_data = obs->GetUnitTypeData().at(probe->unit_type);
 
     const auto& movement_speed = unit_data.movement_speed;
-
-    // Calculate the time it will take to reach the ideal position.
-    //const auto& distance = sc2::Distance2D(probe->pos, ideal_position);
 
     const auto& time_to_reach = movePosition.second / movement_speed;
 
@@ -1162,9 +756,9 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
         // Build the structure.
 
         if (target != nullptr) {
-            Actions()->UnitCommand(probe, ability_id, target);
+            actions->UnitCommand(probe, ability_id, target);
         } else {
-            Actions()->UnitCommand(probe, ability_id, ideal_position);
+            actions->UnitCommand(probe, ability_id, ideal_position);
         }
 
         return BuildResult(true, time_to_reach, cost);
@@ -1176,7 +770,7 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
     }
 
     // Move the probe to the ideal position.
-    Actions()->UnitCommand(probe, sc2::ABILITY_ID::MOVE_MOVE, movePosition.first);
+    actions->UnitCommand(probe, sc2::ABILITY_ID::MOVE_MOVE, movePosition.first);
 
     // Delay the order.
     return BuildResult(true, 0, cost, probe->tag, DelayedOrder{
@@ -1185,117 +779,4 @@ BuildResult Bot::AttemptBuild(sc2::ABILITY_ID ability_id)
         target != nullptr ? target->tag : 0,
         time_to_reach + ElapsedTime()
     });
-}
-
-void Bot::FindRamps()
-{
-    const auto& gameInfo = Observation()->GetGameInfo();
-
-    auto* debug = Debug();
-
-    const auto* observation = Observation();
-
-    std::vector<sc2::Point3D> rampTerrain;
-    std::unordered_set<float> playableHeights;
-
-    for (auto i = gameInfo.playable_min.x; i < gameInfo.playable_max.x; i++)
-    {
-        for (auto j = gameInfo.playable_min.y; j < gameInfo.playable_max.y; j++)
-        {
-            const auto& point = sc2::Point2D(i, j);
-            const auto& pathing = observation->IsPathable(point);
-            const auto& placement = observation->IsPlacable(point);
-            const auto height = observation->TerrainHeight(point);
-
-            if (placement)
-            {
-                playableHeights.insert(height);
-            }
-
-            if (pathing && !placement)
-            {
-                rampTerrain.push_back(sc2::Point3D(point.x, point.y, height));
-            }
-        }
-    }
-
-    // Filter out those points which are not within 0.3 of a playable height.
-    for (auto i = 0; i < rampTerrain.size(); i++)
-    {
-        const auto& point = rampTerrain[i];
-        
-        auto found = false;
-
-        for (auto height : playableHeights)
-        {
-            if (std::abs(point.z - height) < 0.3f)
-            {
-                found = true;
-                break;
-            }
-        }
-
-        if (!found)
-        {
-            rampTerrain.erase(rampTerrain.begin() + i);
-            i--;
-        }
-    }
-
-    // Cluster the points.
-    auto clusters = std::vector<std::pair<sc2::Point3D, std::vector<sc2::Point3D>>>();
-
-    for (auto i = 0; i < rampTerrain.size(); i++)
-    {
-        const auto& point = rampTerrain[i];
-
-        auto found = false;
-
-        for (auto& cluster : clusters)
-        {
-            // Has to be within 15 units of the cluster and not different in height by more than 0.5.
-            if (sc2::DistanceSquared2D(cluster.first, point) < 7.0f * 7.0f &&
-                std::abs(cluster.first.z - point.z) < 0.5f)
-            {
-                cluster.second.push_back(point);
-                found = true;
-
-                // Recalculate the center of mass.
-                sc2::Point3D center = {0.0f, 0.0f, 0.0f};
-
-                for (auto& p : cluster.second)
-                {
-                    center.x += p.x;
-                    center.y += p.y;
-                    center.z += p.z;
-                }
-
-                center.x /= cluster.second.size();
-                center.y /= cluster.second.size();
-                center.z /= cluster.second.size();
-
-                cluster.first = center;
-
-                break;
-            }
-        }
-
-        if (!found)
-        {
-            clusters.push_back({point, {point}});
-        }
-    }
-
-    m_Ramps.resize(clusters.size());
-
-    for (auto i = 0; i < clusters.size(); i++)
-    {
-        m_Ramps[i].point = clusters[i].first;
-
-        //debug->DebugCreateUnit(sc2::UNIT_TYPEID::PROTOSS_OBSERVER, clusters[i].first);
-    }
-
-    debug->SendDebug();
-
-    const auto* query = Query();
 }

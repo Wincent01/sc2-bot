@@ -4,6 +4,8 @@
 #include <sc2api/sc2_common.h>
 #include <sc2api/sc2_agent.h>
 #include <sc2api/sc2_unit.h>
+#include <sc2api/sc2_interfaces.h>
+#include <sc2api/sc2_queryinterface.h>
 
 #include "Utilities.h"
 
@@ -236,4 +238,111 @@ std::pair<sc2::Point2D, float> scbot::Map::GetBestPath(sc2::QueryInterface* quer
     }
 
     return std::make_pair(best_path, shortest_distance);
+}
+
+std::vector<scdata::Ramp> scbot::Map::FindRamps(sc2::QueryInterface* query, const sc2::ObservationInterface* observation)
+{
+    const auto& gameInfo = observation->GetGameInfo();
+
+    std::vector<sc2::Point3D> rampTerrain;
+    std::unordered_set<float> playableHeights;
+
+    for (auto i = gameInfo.playable_min.x; i < gameInfo.playable_max.x; i++)
+    {
+        for (auto j = gameInfo.playable_min.y; j < gameInfo.playable_max.y; j++)
+        {
+            const auto& point = sc2::Point2D(i, j);
+            const auto& pathing = observation->IsPathable(point);
+            const auto& placement = observation->IsPlacable(point);
+            const auto height = observation->TerrainHeight(point);
+
+            if (placement)
+            {
+                playableHeights.insert(height);
+            }
+
+            if (pathing && !placement)
+            {
+                rampTerrain.push_back(sc2::Point3D(point.x, point.y, height));
+            }
+        }
+    }
+
+    // Filter out those points which are not within 0.3 of a playable height.
+    for (auto i = 0; i < rampTerrain.size(); i++)
+    {
+        const auto& point = rampTerrain[i];
+        
+        auto found = false;
+
+        for (auto height : playableHeights)
+        {
+            if (std::abs(point.z - height) < 0.3f)
+            {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            rampTerrain.erase(rampTerrain.begin() + i);
+            i--;
+        }
+    }
+
+    // Cluster the points.
+    auto clusters = std::vector<std::pair<sc2::Point3D, std::vector<sc2::Point3D>>>();
+
+    for (auto i = 0; i < rampTerrain.size(); i++)
+    {
+        const auto& point = rampTerrain[i];
+
+        auto found = false;
+
+        for (auto& cluster : clusters)
+        {
+            // Has to be within 15 units of the cluster and not different in height by more than 0.5.
+            if (sc2::DistanceSquared2D(cluster.first, point) < 7.0f * 7.0f &&
+                std::abs(cluster.first.z - point.z) < 0.5f)
+            {
+                cluster.second.push_back(point);
+                found = true;
+
+                // Recalculate the center of mass.
+                sc2::Point3D center = {0.0f, 0.0f, 0.0f};
+
+                for (auto& p : cluster.second)
+                {
+                    center.x += p.x;
+                    center.y += p.y;
+                    center.z += p.z;
+                }
+
+                center.x /= cluster.second.size();
+                center.y /= cluster.second.size();
+                center.z /= cluster.second.size();
+
+                cluster.first = center;
+
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            clusters.push_back({point, {point}});
+        }
+    }
+
+    auto ramps = std::vector<scdata::Ramp>();
+
+    ramps.resize(clusters.size());
+
+    for (auto i = 0; i < clusters.size(); i++)
+    {
+        ramps[i].point = clusters[i].first;
+    }
+    
+    return ramps;
 }

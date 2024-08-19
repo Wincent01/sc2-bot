@@ -4,6 +4,8 @@
 #include <sc2api/sc2_unit.h>
 #include <sc2api/sc2_interfaces.h>
 
+#include "Data.h"
+
 namespace scbot::Map {
 
 std::vector<sc2::QueryInterface::PlacementQuery> GeneratePlacementQueries(
@@ -109,5 +111,9 @@ std::pair<sc2::Point2D, float> GetBestPath(
     float step_size = 45.0f
 );
 
+std::vector<scdata::Ramp> FindRamps(
+    sc2::QueryInterface* query,
+    const sc2::ObservationInterface* observation
+);
 
 }

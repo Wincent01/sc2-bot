@@ -8,8 +8,11 @@
 #include <sc2api/sc2_unit.h>
 
 #include <chrono>
+#include <memory>
 
-#include <Data.h>
+#include "Data.h"
+#include "Collective.h"
+#include "Proletariat.h"
 
 using namespace scdata;
 
@@ -46,25 +49,15 @@ private:
     void OnError(const std::vector<sc2::ClientError>& client_errors,
         const std::vector<std::string>& protocol_errors = {}) final;
 
-    std::vector<Ramp> m_Ramps;
-    std::vector<sc2::Point3D> m_Expansions;
-
     sc2::Point2D GetClosestRamp(const sc2::Point2D& center);
 
     BuildResult AttemptBuild(sc2::ABILITY_ID ability_id);
 
     bool AnyInProgress(const sc2::UNIT_TYPEID& unit_id);
 
-    void RedistributeWorkers(const sc2::Units& bases);
+    sc2::Point2D GetIdealPosition(sc2::ABILITY_ID ability_id);
+    TrainResult GetIdealUnitProduction(sc2::ABILITY_ID ability_id);
 
-    sc2::Units RedistributeWorkers(const sc2::Unit* base, int32_t& workers_needed);
-
-    void ReturnToMining(const sc2::Unit* probe);
-
-    void FindRamps();
-
-    void FindExpansions();
-    
     std::vector<ActionPlan> m_BuildOrder = {
         {sc2::ABILITY_ID::TRAIN_PROBE},
         {sc2::ABILITY_ID::TRAIN_PROBE},
@@ -89,11 +82,11 @@ private:
         {sc2::ABILITY_ID::RESEARCH_WARPGATE},
         {sc2::ABILITY_ID::TRAIN_ADEPT}
     };
-
-    sc2::Point2D GetIdealPosition(sc2::ABILITY_ID ability_id);
-    TrainResult GetIdealUnitProduction(sc2::ABILITY_ID ability_id);
-
+    
     // Step-data
+    std::vector<Ramp> m_Ramps;
+    std::vector<sc2::Point3D> m_Expansions;
+
     sc2::Units m_AllUnits;
     sc2::Units m_NeutralUnits;
     std::unordered_map<sc2::UNIT_TYPEID, sc2::Units> m_Units;
@@ -104,6 +97,9 @@ private:
 
     float m_NextBuildDispatch;
 
+    std::shared_ptr<scbot::Collective> m_Collective;
+    std::shared_ptr<scbot::Proletariat> m_Proletariat;
+
     AbilityCost m_Resources;
 
     AbilityCost GetPlannedCosts();
@@ -111,8 +107,4 @@ private:
     float ElapsedTime();
 
     void CheckDelayedOrder(const sc2::Unit* unit_);
-
-    void UpdateStepData();
-
-    const sc2::Units& GetUnits(sc2::UNIT_TYPEID unit_type_) const;
 };

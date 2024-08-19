@@ -8,6 +8,8 @@ set(bot_sources
     Data.cpp
     Utilities.cpp
     Map.cpp
+    Proletariat.cpp
+    Collective.cpp
     )
 
 add_executable(BlankBot ${bot_sources})
