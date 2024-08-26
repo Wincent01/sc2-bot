@@ -48,14 +48,14 @@ public:
      * 
      * @return A pair of integers. The first integer is the number of workers gathering minerals and the second integer is the number of workers gathering gas.
      */
-    std::pair<int32_t, int32_t> GetWorkerCount();
+    const std::pair<int32_t, int32_t>& GetWorkerCount() const;
 
     /**
      * @brief Get an estimate of the mineral and gas income per second.
      * 
      * @return A pair of floats. The first float is the mineral income per second and the second float is the gas income per second.
      */
-    std::pair<float, float> GetIncomePerSecond();
+    const std::pair<float, float>& GetIncomePerSecond() const;
 
     /**
      * @brief Get an ideal worker that can be used to build a building.
@@ -73,7 +73,15 @@ public:
 private:
     sc2::Units RedistributeWorkers(const sc2::Unit* base, int32_t& workers_needed);
 
+    std::pair<int32_t, int32_t> CalculateWorkCount();
+
+    std::pair<float, float> CalculateIncomePerSecond();
+
     std::shared_ptr<Collective> m_Collective;
+
+    std::pair<int32_t, int32_t> m_WorkerCount;
+
+    std::pair<float, float> m_IncomePerSecond;
 };
 
 } // namespace scbot

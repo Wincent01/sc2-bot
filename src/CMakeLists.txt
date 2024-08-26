@@ -10,6 +10,9 @@ set(bot_sources
     Map.cpp
     Proletariat.cpp
     Collective.cpp
+    Production.cpp
+    Economy.cpp
+    Liberation.cpp
     )
 
 add_executable(BlankBot ${bot_sources})

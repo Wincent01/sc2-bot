@@ -3,6 +3,9 @@
 #include <sc2api/sc2_unit.h>
 #include <sc2api/sc2_agent.h>
 #include <sc2api/sc2_interfaces.h>
+#include <sc2lib/sc2_search.h>
+
+#include "Map.h"
 
 sc2::Units scbot::Collective::s_EmptyUnits {};
 
@@ -11,6 +14,9 @@ scbot::Collective::Collective(sc2::Agent* bot)
     NON_NULL(bot);
 
     this->bot = bot;
+    
+    m_Ramps = Map::FindRamps(Query(), Observation());
+    m_Expansions = sc2::search::CalculateExpansionLocations(Observation(), Query());
 }
 
 scbot::Collective::~Collective()
@@ -107,6 +113,34 @@ sc2::QueryInterface* scbot::Collective::Query() const
 sc2::DebugInterface* scbot::Collective::Debug()
 {
     return bot->Debug();
+}
+
+const std::vector<scdata::Ramp>& scbot::Collective::GetRamps() const
+{
+    return m_Ramps;
+}
+
+const std::vector<sc2::Point3D>& scbot::Collective::GetExpansions() const
+{
+    return m_Expansions;
+}
+
+sc2::Point2D scbot::Collective::GetClosestRamp(const sc2::Point2D& position) const
+{
+    float distance = std::numeric_limits<float>::max();
+    sc2::Point2D closest_ramp;
+
+    for (const scdata::Ramp& ramp : m_Ramps)
+    {
+        float d = sc2::DistanceSquared2D(position, ramp.point);
+        if (d < distance)
+        {
+            distance = d;
+            closest_ramp = ramp.point;
+        }
+    }
+
+    return closest_ramp;
 }
 
 void scbot::Collective::UpdateUnits()

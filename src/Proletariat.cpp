@@ -104,6 +104,10 @@ void scbot::Proletariat::ReturnToMining(const sc2::Unit* probe)
     const auto& probes = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_PROBE);
     const auto& nexus_units = Utilities::FilterOutInProgress(m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_NEXUS));
 
+    if (mining_points.empty() || probes.empty() || nexus_units.empty()) {
+        return;
+    }
+
     // Find the closest:
     // * Mining point withing 15 units of a Nexus;
     // * That has less than 2 probes mining it (3 for gas);
@@ -151,7 +155,17 @@ void scbot::Proletariat::ReturnToMining(const sc2::Unit* probe)
     actions->UnitCommand(probe, sc2::ABILITY_ID::HARVEST_GATHER, closest_mining_point);
 }
 
-std::pair<int32_t, int32_t> scbot::Proletariat::GetWorkerCount()
+const std::pair<int32_t, int32_t>& scbot::Proletariat::GetWorkerCount() const
+{
+    return m_WorkerCount;
+}
+
+const std::pair<float, float>& scbot::Proletariat::GetIncomePerSecond() const
+{
+    return m_IncomePerSecond;
+}
+
+std::pair<int32_t, int32_t> scbot::Proletariat::CalculateWorkCount()
 {
     const auto& probes = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_PROBE);
 
@@ -183,7 +197,7 @@ std::pair<int32_t, int32_t> scbot::Proletariat::GetWorkerCount()
     return {mineral_workers, gas_workers};
 }
 
-std::pair<float, float> scbot::Proletariat::GetIncomePerSecond()
+std::pair<float, float> scbot::Proletariat::CalculateIncomePerSecond()
 {
     auto workers = GetWorkerCount();
 
@@ -208,6 +222,8 @@ const sc2::Unit* scbot::Proletariat::GetWorkerForBuilding(const sc2::Point2D& po
 
 void scbot::Proletariat::OnStep()
 {
+    m_WorkerCount = CalculateWorkCount();
+    m_IncomePerSecond = CalculateIncomePerSecond();
 }
 
 sc2::Units scbot::Proletariat::RedistributeWorkers(const sc2::Unit *base, int32_t &workers_needed)

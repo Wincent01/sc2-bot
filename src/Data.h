@@ -50,50 +50,65 @@ namespace scdata {
             warp_position({0.0f, 0.0f}) {}
     };
 
-    struct AbilityCost
+    struct ResourcePair
     {
         int32_t minerals;
         int32_t vespene;
 
         // Subtract operator
-        AbilityCost operator-(const AbilityCost& other) const
+        ResourcePair operator-(const ResourcePair& other) const
         {
             return {minerals - other.minerals, vespene - other.vespene};
         }
 
-        bool operator<(const AbilityCost& other) const
+        bool operator<(const ResourcePair& other) const
         {
             return minerals < other.minerals || vespene < other.vespene;
         }
 
-        bool operator>(const AbilityCost& other) const
+        bool operator>(const ResourcePair& other) const
         {
             return minerals > other.minerals || vespene > other.vespene;
         }
 
-        bool operator==(const AbilityCost& other) const
+        bool operator==(const ResourcePair& other) const
         {
             return minerals == other.minerals && vespene == other.vespene;
         }
 
-        bool operator!=(const AbilityCost& other) const
+        bool operator!=(const ResourcePair& other) const
         {
             return minerals != other.minerals || vespene != other.vespene;
         }
 
-        bool operator<=(const AbilityCost& other) const
+        bool operator<=(const ResourcePair& other) const
         {
             return minerals <= other.minerals || vespene <= other.vespene;
         }
 
-        bool operator>=(const AbilityCost& other) const
+        bool operator>=(const ResourcePair& other) const
         {
             return minerals >= other.minerals || vespene >= other.vespene;
         }
 
-        AbilityCost operator+(const AbilityCost& other) const
+        ResourcePair operator+(const ResourcePair& other) const
         {
             return {minerals + other.minerals, vespene + other.vespene};
+        }
+
+        // +=/-= operator
+        ResourcePair& operator+=(const ResourcePair& other)
+        {
+            minerals += other.minerals;
+            vespene += other.vespene;
+            return *this;
+        }
+
+        ResourcePair& operator-=(const ResourcePair& other)
+        {
+            minerals -= other.minerals;
+            vespene -= other.vespene;
+            return *this;
         }
     };
 
@@ -101,18 +116,18 @@ namespace scdata {
     {
         bool success;
         float time;
-        AbilityCost cost;
+        ResourcePair cost;
         sc2::Tag delayed_order_tag;
         DelayedOrder delayed_order;
 
-        BuildResult(bool success_, float time_, AbilityCost cost_, sc2::Tag delayed_order_tag_, DelayedOrder delayed_order_):
+        BuildResult(bool success_, float time_, ResourcePair cost_, sc2::Tag delayed_order_tag_, DelayedOrder delayed_order_):
             success(success_),
             time(time_),
             cost(cost_),
             delayed_order_tag(delayed_order_tag_),
             delayed_order(delayed_order_) {}
 
-        BuildResult(bool success_, float time_, AbilityCost cost_):
+        BuildResult(bool success_, float time_, ResourcePair cost_):
             success(success_),
             time(time_),
             cost(cost_),
@@ -149,13 +164,13 @@ namespace scdata {
         sc2::ABILITY_ID ability_id;
     };
 
-    extern std::unordered_map<sc2::ABILITY_ID, std::unordered_set<sc2::UNIT_TYPEID>> UnitRequirements;
+    extern std::unordered_map<sc2::ABILITY_ID, std::unordered_set<sc2::UNIT_TYPEID>> AbilityRequirements;
 
     extern std::unordered_set<sc2::UNIT_TYPEID> PoweredStructures;
 
     extern std::unordered_set<sc2::ABILITY_ID> MiningAbilities;
 
-    extern std::unordered_map<sc2::ABILITY_ID, AbilityCost> AbilityCosts;
+    extern std::unordered_map<sc2::ABILITY_ID, ResourcePair> AbilityCosts;
 
     extern std::unordered_map<sc2::ABILITY_ID, sc2::UNIT_TYPEID> AssociatedBuilding;
 
@@ -164,4 +179,6 @@ namespace scdata {
     extern std::unordered_set<sc2::ABILITY_ID> UpgradeTypes;
 
     extern std::unordered_map<sc2::ABILITY_ID, sc2::ABILITY_ID> UnitTrainAbilityWarpTypes;
+
+    extern std::unordered_set<sc2::ABILITY_ID> StructureTypes;
 }

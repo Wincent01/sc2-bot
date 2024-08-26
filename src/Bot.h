@@ -13,6 +13,9 @@
 #include "Data.h"
 #include "Collective.h"
 #include "Proletariat.h"
+#include "Production.h"
+#include "Economy.h"
+#include "Liberation.h"
 
 using namespace scdata;
 
@@ -49,15 +52,6 @@ private:
     void OnError(const std::vector<sc2::ClientError>& client_errors,
         const std::vector<std::string>& protocol_errors = {}) final;
 
-    sc2::Point2D GetClosestRamp(const sc2::Point2D& center);
-
-    BuildResult AttemptBuild(sc2::ABILITY_ID ability_id);
-
-    bool AnyInProgress(const sc2::UNIT_TYPEID& unit_id);
-
-    sc2::Point2D GetIdealPosition(sc2::ABILITY_ID ability_id);
-    TrainResult GetIdealUnitProduction(sc2::ABILITY_ID ability_id);
-
     std::vector<ActionPlan> m_BuildOrder = {
         {sc2::ABILITY_ID::TRAIN_PROBE},
         {sc2::ABILITY_ID::TRAIN_PROBE},
@@ -84,8 +78,6 @@ private:
     };
     
     // Step-data
-    std::vector<Ramp> m_Ramps;
-    std::vector<sc2::Point3D> m_Expansions;
 
     sc2::Units m_AllUnits;
     sc2::Units m_NeutralUnits;
@@ -99,10 +91,11 @@ private:
 
     std::shared_ptr<scbot::Collective> m_Collective;
     std::shared_ptr<scbot::Proletariat> m_Proletariat;
+    std::shared_ptr<scbot::Production> m_Production;
+    std::shared_ptr<scbot::Economy> m_Economy;
+    std::shared_ptr<scbot::Liberation> m_Liberation;
 
-    AbilityCost m_Resources;
-
-    AbilityCost GetPlannedCosts();
+    ResourcePair GetPlannedCosts();
 
     float ElapsedTime();
 

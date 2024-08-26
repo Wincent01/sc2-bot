@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "config.h"
+#include "Data.h"
 
 namespace scbot
 {
@@ -141,6 +142,28 @@ public:
      */
     sc2::DebugInterface* Debug();
 
+    /**
+     * @brief Get the ramps on the map.
+     * 
+     * @return A collection of ramps
+     */
+    const std::vector<scdata::Ramp>& GetRamps() const;
+
+    /**
+     * @brief Get the expansions on the map.
+     * 
+     * @return A collection of expansions
+     */
+    const std::vector<sc2::Point3D>& GetExpansions() const;
+
+    /**
+     * @brief Get the closest ramp to a position.
+     * 
+     * @param position The position
+     * @return The position of the closest ramp
+     */
+    sc2::Point2D GetClosestRamp(const sc2::Point2D& position) const;
+
 
 private:
     sc2::Agent* bot;
@@ -154,6 +177,9 @@ private:
     std::unordered_map<sc2::UNIT_TYPEID, sc2::Units> m_AlliedUnitsByType;
     std::unordered_map<sc2::UNIT_TYPEID, sc2::Units> m_EnemyUnitsByType;
     std::unordered_map<sc2::UNIT_TYPEID, sc2::Units> m_NeutralUnitsByType;
+
+    std::vector<scdata::Ramp> m_Ramps;
+    std::vector<sc2::Point3D> m_Expansions;
 
     static sc2::Units s_EmptyUnits;
 

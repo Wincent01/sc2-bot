@@ -5,7 +5,7 @@
 #include <sc2api/sc2_agent.h>
 #include <sc2api/sc2_unit.h>
 #include <sc2api/sc2_interfaces.h>
-#include <sc2api/sc2_queryinterface.h>
+#include <sc2api/sc2_map_info.h>
 
 #include "Utilities.h"
 

@@ -348,4 +348,22 @@ bool IsPowered(const sc2::Unit* unit);
  */
 sc2::Units Union(const sc2::Units& a, const sc2::Units& b, bool check_duplicates = false);
 
+/**
+ * @brief Sort the units based on their distance to a point.
+ * 
+ * @param units The set of units to sort.
+ * @param point The point to sort by.
+ * @return The sorted set of units.
+ */
+sc2::Units SortByDistance(const sc2::Units& units, const sc2::Point2D& point);
+
+/**
+ * @brief Sort the units based on their average distance to a set of points.
+ * 
+ * @param units The set of units to sort.
+ * @param points The set of points to sort by.
+ * @return The sorted set of units.
+ */
+sc2::Units SortByAverageDistance(const sc2::Units& units, const sc2::Units& points);
+
 } // namespace scbot::Utilities

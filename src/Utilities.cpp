@@ -94,6 +94,10 @@ bool scbot::Utilities::IsInProgress(const sc2::Unit *unit)
 }
 
 bool scbot::Utilities::AllInProgress(const sc2::Units& units) {
+    if (units.empty()) {
+        return false;
+    }
+
     for (const auto& unit : units) {
         if (!IsInProgress(unit)) {
             return false;
@@ -221,8 +225,16 @@ sc2::Units scbot::Utilities::GetResourcePoints(const sc2::Units& units, bool min
 
     for (const auto& unit : units) {
         if (minerals && IsMineralField(unit)) {
+            if (IsDepleted(unit)) {
+                continue;
+            }
+
             points.push_back(unit);
         } else if (vespene && IsVespeneGeyser(unit)) {
+            if (IsDepleted(unit)) {
+                continue;
+            }
+            
             points.push_back(unit);
         } else if (extractors && IsExtractor(unit)) {
             points.push_back(unit);
@@ -476,4 +488,34 @@ sc2::Units scbot::Utilities::Union(const sc2::Units& a, const sc2::Units& b, boo
     }
 
     return result;
+}
+
+sc2::Units scbot::Utilities::SortByDistance(const sc2::Units& units, const sc2::Point2D& point)
+{
+    sc2::Units sorted_units = units;
+
+    std::sort(sorted_units.begin(), sorted_units.end(), [point](const sc2::Unit* a, const sc2::Unit* b) {
+        return sc2::DistanceSquared2D(a->pos, point) < sc2::DistanceSquared2D(b->pos, point);
+    });
+
+    return sorted_units;
+}
+
+sc2::Units scbot::Utilities::SortByAverageDistance(const sc2::Units& units, const sc2::Units& points)
+{
+    sc2::Units sorted_units = units;
+
+    std::sort(sorted_units.begin(), sorted_units.end(), [points](const sc2::Unit* a, const sc2::Unit* b) {
+        float total_distance_a = 0.0f;
+        float total_distance_b = 0.0f;
+
+        for (const auto& point : points) {
+            total_distance_a += sc2::DistanceSquared2D(a->pos, point->pos);
+            total_distance_b += sc2::DistanceSquared2D(b->pos, point->pos);
+        }
+
+        return total_distance_a / points.size() < total_distance_b / points.size();
+    });
+
+    return sorted_units;
 }
