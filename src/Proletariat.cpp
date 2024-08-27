@@ -80,6 +80,11 @@ void scbot::Proletariat::RedistributeWorkers()
 
                 const auto& worker = excess.back();
 
+                if (IsWorkerAllocated(worker)) {
+                    excess.pop_back();
+                    continue;
+                }
+
                 actions->UnitCommand(worker, sc2::ABILITY_ID::MOVE_MOVE, other_base->pos);
 
                 excess.pop_back();
@@ -90,6 +95,14 @@ void scbot::Proletariat::RedistributeWorkers()
 
 void scbot::Proletariat::ReturnToMining(const sc2::Unit* probe)
 {
+    if (probe == nullptr) {
+        return;
+    }
+
+    if (IsWorkerAllocated(probe)) {
+        return;
+    }
+
     if (probe->unit_type != sc2::UNIT_TYPEID::PROTOSS_PROBE) {
         return;
     }
@@ -215,9 +228,35 @@ const sc2::Unit* scbot::Proletariat::GetWorkerForBuilding(const sc2::Point2D& po
         return nullptr;
     }
 
-    const auto closest_probe = Utilities::ClosestTo(probes, position);
+    const auto filtered = Utilities::FilterUnits(probes, [this](const sc2::Unit* probe) {
+        return !IsWorkerAllocated(probe);
+    });
+
+    if (filtered.empty()) {
+        return nullptr;
+    }
+
+    const auto closest_probe = Utilities::ClosestTo(
+        filtered,
+        position
+    );
 
     return closest_probe;
+}
+
+void scbot::Proletariat::RegisterWorker(const sc2::Unit* worker)
+{
+    m_AllocatedWorkers.emplace(worker->tag);
+}
+
+void scbot::Proletariat::UnregisterWorker(const sc2::Unit* worker)
+{
+    m_AllocatedWorkers.erase(worker->tag);
+}
+
+bool scbot::Proletariat::IsWorkerAllocated(const sc2::Unit* worker) const
+{
+    return m_AllocatedWorkers.find(worker->tag) != m_AllocatedWorkers.end();
 }
 
 void scbot::Proletariat::OnStep()
@@ -226,196 +265,128 @@ void scbot::Proletariat::OnStep()
     m_IncomePerSecond = CalculateIncomePerSecond();
 }
 
-sc2::Units scbot::Proletariat::RedistributeWorkers(const sc2::Unit *base, int32_t &workers_needed)
-{
+sc2::Units scbot::Proletariat::RedistributeWorkers(const sc2::Unit* base, int32_t& workers_needed) {
     auto* actions = m_Collective->Actions();
     const auto* obs = m_Collective->Observation();
 
+    // Gather resource points and nearby probes
     auto points = Utilities::WithinRange(
-        Utilities::GetResourcePoints(m_Collective->GetNeutralUnits(), true, false, true),
-        base->pos,
-        15.0f
+        Utilities::GetResourcePoints(Utilities::Union(
+            m_Collective->GetAllUnits(), m_Collective->GetNeutralUnits()
+        ), true, false, true),
+        base->pos, 15.0f
     );
-
+    
     auto probes = Utilities::WithinRange(
         m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_PROBE),
-        base->pos,
-        15.0f
+        base->pos, 15.0f
     );
 
-    const auto num_workers = probes.size();
-
     std::unordered_set<const sc2::Unit*> assigned_workers;
-
     workers_needed = 0;
-    uint32_t mineral_points = 0;
 
-    for (const auto& point : points) {
-        if (Utilities::IsDepleted(point)) {
-            continue;
-        }
-
-        if (!Utilities::IsExtractor(point)) {
-
-            workers_needed += 2;
-            ++mineral_points;
-            continue;
-        }
-
-        if (Utilities::IsInProgress(point)) {
-            continue;
-        }
-
-        workers_needed += 3;
-
-        if (assigned_workers.size() == num_workers) {
-            continue;
-        }
-
-        // Find the amount of workers on this point.
-        sc2::Units workers;
+    // Helper lambda to find the closest available worker
+    auto find_closest_worker = [&](const sc2::Unit* point) -> const sc2::Unit* {
+        const sc2::Unit* closest_worker = nullptr;
+        float closest_distance = std::numeric_limits<float>::max();
 
         for (const auto& probe : probes) {
-            if (Utilities::HasQueuedOrder(probe, point->tag)) {
-                assigned_workers.emplace(probe);
-                workers.push_back(probe);
+            bool is_assigned = false;
+            for (const auto& assigned : m_WorkerOnPoints) {
+                if (assigned.second.find(probe->tag) != assigned.second.end()) {
+                    is_assigned = true;
+                    break;
+                }
+            }
+
+            if (is_assigned) continue; // Skip already assigned workers
+
+            if (assigned_workers.find(probe) != assigned_workers.end()) continue; // Skip already assigned workers
+            if (probe->orders.empty()) continue; // Skip idle workers
+
+            float distance = sc2::DistanceSquared2D(probe->pos, point->pos);
+            if (distance < closest_distance) {
+                closest_worker = probe;
+                closest_distance = distance;
             }
         }
+        return closest_worker;
+    };
 
-        const auto num_workers_on_point = workers.size();
+    // Helper lambda to assign workers to a resource point
+    auto assign_workers_to_point = [&](const sc2::Unit* point, int max_workers_needed) {
+        int workers_on_point = std::count_if(probes.begin(), probes.end(),
+            [&](const sc2::Unit* probe) {
+                const auto pointIt = m_WorkerOnPoints.find(point->tag);
+                if (pointIt == m_WorkerOnPoints.end()) return false;
+                return pointIt->second.find(probe->tag) != pointIt->second.end();
+            }
+        );
 
-        const auto num_workers_needed = 3 - num_workers_on_point;
+        int workers_to_assign = max_workers_needed - workers_on_point;
+        while (workers_to_assign > 0) {
+            const sc2::Unit* worker = find_closest_worker(point);
+            if (!worker || IsWorkerAllocated(worker)) break; // No more workers available
 
-        if (num_workers_needed <= 0) {
-            continue;
+            actions->UnitCommand(worker, sc2::ABILITY_ID::HARVEST_GATHER, point);
+            assigned_workers.emplace(worker);
+            --workers_to_assign;
+            m_WorkerOnPoints[point->tag].emplace(worker->tag);
         }
-        
-        while (num_workers_needed > 0) {
-            // Find the closest non-assigned worker.
-            const sc2::Unit* closest_worker = nullptr;
-            float closest_distance = std::numeric_limits<float>::max();
+    };
 
-            for (const auto& probe : probes) {
-                if (assigned_workers.find(probe) != assigned_workers.end()) {
-                    continue;
-                }
+    // Loop through points to assign workers
+    for (const auto& point : points) {
+        if (Utilities::IsInProgress(point)) continue;
 
-                // Make sure it's targeting a mineral field.
-                if (probe->orders.empty()) {
-                    continue;
-                }
-                
-                bool found = false;
+        int required_workers = (Utilities::IsExtractor(point)) ? 3 : 2;
+        workers_needed += required_workers;
 
-                for (const auto& order : probe->orders) {
-                    for (const auto& point : points) {
-                        if (point->unit_type == sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR) {
-                            continue;
-                        }
-
-                        if (order.target_unit_tag == point->tag) {
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (found) {
-                    continue;
-                }
-
-                const auto distance = sc2::DistanceSquared2D(probe->pos, point->pos);
-
-                if (distance < closest_distance) {
-                    closest_worker = probe;
-                    closest_distance = distance;
-                }
-            }
-
-            if (closest_worker == nullptr) {
-                break;
-            }
-
-            actions->UnitCommand(closest_worker, sc2::ABILITY_ID::HARVEST_GATHER, point);      
-
-            assigned_workers.emplace(closest_worker);      
+        if (assigned_workers.size() < probes.size()) {
+            assign_workers_to_point(point, required_workers);
         }
     }
 
-    // Assign the rest of the workers until we have (mineral points * 2) workers.
+    // Assign remaining workers to under-saturated points
     for (const auto& probe : probes) {
-        if (assigned_workers.find(probe) != assigned_workers.end()) {
-            continue;
-        }
-
-        if (mineral_points * 2 == assigned_workers.size()) {
-            break;
-        }
-
-        assigned_workers.emplace(probe);
-
-        // If the probe is not already mining, assign it to the closest mineral field.
-        if (!Utilities::HasQueuedOrder(probe, sc2::ABILITY_ID::HARVEST_RETURN)) {
-            bool targeting_assimilator = false;
-
-            for (const auto& order : probe->orders) {
-                if (order.ability_id == sc2::ABILITY_ID::HARVEST_GATHER) {
-                    for (const auto& point : points) {
-                        if (point->unit_type == sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR && order.target_unit_tag == point->tag) {
-                            targeting_assimilator = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (!targeting_assimilator) {
-                continue;
-            }
-        }
+        if (assigned_workers.find(probe) != assigned_workers.end()) continue;
 
         const sc2::Unit* closest_point = nullptr;
         float closest_distance = std::numeric_limits<float>::max();
 
+        // Find the closest non-saturated resource point
         for (const auto& point : points) {
-            if (point->unit_type == sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR) {
-                continue;
-            }
+            int max_workers = Utilities::IsExtractor(point) ? 3 : 2;
 
-            // Count the number of workers on this point.
-            int32_t num_workers_on_point = std::count_if(probes.begin(), probes.end(), [&point](const sc2::Unit* probe) {
-                return Utilities::IsGatheringFrom(probe, point);
-            });
+            int workers_on_point = std::count_if(probes.begin(), probes.end(),
+                [&](const sc2::Unit* p) { return Utilities::IsGatheringFrom(p, point); }
+            );
+            if (workers_on_point >= max_workers) continue; // Skip saturated points
 
-            if (num_workers_on_point >= 2) {
-                continue;
-            }
-
-            const auto distance = sc2::DistanceSquared2D(probe->pos, point->pos);
-
+            float distance = sc2::DistanceSquared2D(probe->pos, point->pos);
             if (distance < closest_distance) {
                 closest_point = point;
                 closest_distance = distance;
             }
         }
 
-        if (closest_point == nullptr) {
-            continue;
+        if (closest_point && !IsWorkerAllocated(probe)) {
+            actions->UnitCommand(probe, sc2::ABILITY_ID::HARVEST_GATHER, closest_point);
+            assigned_workers.emplace(probe);
+            m_WorkerOnPoints[closest_point->tag].emplace(probe->tag);
         }
-
-        actions->UnitCommand(probe, sc2::ABILITY_ID::HARVEST_GATHER, closest_point, true);
     }
 
-    workers_needed -= assigned_workers.size();
+    workers_needed = std::max(0, workers_needed - static_cast<int>(assigned_workers.size()));
 
-    workers_needed = std::max(0, workers_needed);
-
-    // Return units not assigned to any point.
+    // Return excess workers
     sc2::Units excess_workers;
-
     for (const auto& probe : probes) {
         if (assigned_workers.find(probe) == assigned_workers.end()) {
             excess_workers.push_back(probe);
+            for (auto& it : m_WorkerOnPoints) {
+                it.second.erase(probe->tag);
+            }
         }
     }
 

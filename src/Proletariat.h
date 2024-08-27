@@ -66,6 +66,28 @@ public:
     const sc2::Unit* GetWorkerForBuilding(const sc2::Point2D& position);
 
     /**
+     * @brief Register a worker as allocated.
+     * 
+     * @param worker The worker unit
+     */
+    void RegisterWorker(const sc2::Unit* worker);
+
+    /**
+     * @brief Unregister a worker as allocated.
+     *
+     * @param worker The worker unit
+     */
+    void UnregisterWorker(const sc2::Unit* worker);
+
+    /**
+     * @brief Check if a worker is allocated.
+     * 
+     * @param worker The worker unit
+     * @return true if the worker is allocated, false otherwise
+     */
+    bool IsWorkerAllocated(const sc2::Unit* worker) const;
+
+    /**
      * @brief Method to call every step.
      */
     void OnStep();
@@ -82,6 +104,10 @@ private:
     std::pair<int32_t, int32_t> m_WorkerCount;
 
     std::pair<float, float> m_IncomePerSecond;
+
+    std::unordered_set<sc2::Tag> m_AllocatedWorkers;
+
+    std::unordered_map<sc2::Tag, std::unordered_set<sc2::Tag>> m_WorkerOnPoints;
 };
 
 } // namespace scbot

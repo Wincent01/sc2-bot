@@ -162,6 +162,7 @@ namespace scdata {
     struct ActionPlan
     {
         sc2::ABILITY_ID ability_id;
+        int32_t id = 0;
     };
 
     extern std::unordered_map<sc2::ABILITY_ID, std::unordered_set<sc2::UNIT_TYPEID>> AbilityRequirements;

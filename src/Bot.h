@@ -62,6 +62,7 @@ private:
         {sc2::ABILITY_ID::TRAIN_PROBE},
         {sc2::ABILITY_ID::BUILD_ASSIMILATOR},
         {sc2::ABILITY_ID::BUILD_CYBERNETICSCORE},
+        {sc2::ABILITY_ID::BUILD_ASSIMILATOR},
         {sc2::ABILITY_ID::BUILD_NEXUS},
         {sc2::ABILITY_ID::TRAIN_PROBE},
         {sc2::ABILITY_ID::BUILD_ASSIMILATOR},
@@ -74,8 +75,17 @@ private:
         {sc2::ABILITY_ID::TRAIN_PROBE},
         {sc2::ABILITY_ID::BUILD_STARGATE},
         {sc2::ABILITY_ID::RESEARCH_WARPGATE},
-        {sc2::ABILITY_ID::TRAIN_ADEPT}
+        {sc2::ABILITY_ID::TRAIN_ADEPT},
+        {sc2::ABILITY_ID::BUILD_GATEWAY},
+        {sc2::ABILITY_ID::BUILD_GATEWAY},
+        {sc2::ABILITY_ID::BUILD_PYLON},
+        {sc2::ABILITY_ID::BUILD_NEXUS},
+        {sc2::ABILITY_ID::BUILD_PYLON},
+        {sc2::ABILITY_ID::BUILD_GATEWAY},
+        {sc2::ABILITY_ID::BUILD_GATEWAY},
     };
+
+    int32_t m_ActionIndex = 0;
     
     // Step-data
 
@@ -94,6 +104,8 @@ private:
     std::shared_ptr<scbot::Production> m_Production;
     std::shared_ptr<scbot::Economy> m_Economy;
     std::shared_ptr<scbot::Liberation> m_Liberation;
+
+    std::unordered_map<int32_t, sc2::Tag> m_BuildingWorkers;
 
     ResourcePair GetPlannedCosts();
 

@@ -92,6 +92,17 @@ public:
     std::optional<const sc2::Unit*> MoveProbeToPosition(Proletariat& proletariat, const sc2::Point2D& position, float distance, float max_time);
 
     /**
+     * @brief Move a probe to a position for building.
+     * 
+     * @param probe The probe
+     * @param position The position
+     * @param distance The distance to keep from the position
+     * @param max_time The maximum time to spend moving the probe
+     * @return true if the probe is at the position, false otherwise
+     */
+    bool MoveProbeToPosition(const sc2::Unit* probe, const sc2::Point2D& position, float distance, float max_time);
+
+    /**
      * @brief Build a building.
      * 
      * @param probe The probe

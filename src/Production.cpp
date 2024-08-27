@@ -37,6 +37,10 @@ std::optional<float> scbot::Production::TimeLeftForUnitRequirements(sc2::ABILITY
         if (units.empty()) {
             return std::nullopt;
         }
+
+        if (!Utilities::AllInProgress(units)) {
+            continue;
+        }
         
         for (const auto& unit : units) {
             // Find the unit that has the shortest time left
@@ -217,7 +221,40 @@ std::optional<const sc2::Unit*> scbot::Production::MoveProbeToPosition(Proletari
     return probe;
 }
 
-void scbot::Production::BuildBuilding(const sc2::Unit* probe, sc2::ABILITY_ID ability_id, const sc2::Point2D& position)
+bool scbot::Production::MoveProbeToPosition(const sc2::Unit* probe, const sc2::Point2D& position, float distance, float max_time)
+{
+    NON_NULL(probe);
+
+    const auto& [movePosition, moveDistance] = scbot::Map::GetBestPath(
+        m_Collective->Query(),
+        probe,
+        position,
+        distance,
+        distance + 1.0f
+    );
+
+    if (movePosition.x == 0.0f && movePosition.y == 0.0f) {
+        return true;
+    }
+
+    const auto& unit_data = m_Collective->Observation()->GetUnitTypeData();
+
+    const auto& movement_speed = unit_data.at(probe->unit_type).movement_speed;
+
+    const auto time_to_move = moveDistance / movement_speed;
+
+    if (time_to_move < max_time) {
+        return false;
+    }
+
+    auto* actions = m_Collective->Actions();
+
+    actions->UnitCommand(probe, sc2::ABILITY_ID::MOVE_MOVE, movePosition);
+
+    return true;
+}
+
+void scbot::Production::BuildBuilding(const sc2::Unit *probe, sc2::ABILITY_ID ability_id, const sc2::Point2D &position)
 {
     NON_NULL(probe);
 
@@ -381,7 +418,7 @@ std::optional<sc2::Point2D> scbot::Production::IdealPositionForAssimilator()
         return static_cast<float>(Utilities::CountWithinRange(assimilators, nexus->pos, 15.0f));
     });
 
-    const auto vespene_geysers = scbot::Utilities::GetResourcePoints(m_Collective->GetAlliedUnits(), false, true, false);
+    const auto vespene_geysers = scbot::Utilities::GetResourcePoints(m_Collective->GetNeutralUnits(), false, true, false);
 
     if (vespene_geysers.empty()) {
         return std::nullopt;

@@ -126,7 +126,11 @@ void Bot::OnStep()
     bool is_planning = false;
 
     for (auto it = m_BuildOrder.begin(); it != m_BuildOrder.end(); ++it) {
-        const auto& plan = *it;
+        auto& plan = *it;
+
+        if (plan.id == 0) {
+            plan.id = ++m_ActionIndex;
+        }
 
         const auto& ability_id = plan.ability_id;
 
@@ -175,16 +179,38 @@ void Bot::OnStep()
                 break;
             }
 
-            const auto moving_probe = m_Production->MoveProbeToPosition(*m_Proletariat, position, distance, time_left);
-
-            if (!moving_probe.has_value()) {
-                continue;
+            if (ability_id == sc2::ABILITY_ID::BUILD_ASSIMILATOR) {
+                int i = 0;
             }
 
-            const auto* probe = moving_probe.value(); // can't be null
+            const sc2::Unit* probe = nullptr;
+
+            const auto& builderWorkerIt = m_BuildingWorkers.find(plan.id);
+
+            if (builderWorkerIt != m_BuildingWorkers.end()) {
+                probe = obs->GetUnit(builderWorkerIt->second);
+
+                if (probe != nullptr) {
+                    m_Production->MoveProbeToPosition(probe, position, distance, time_left);
+                }
+            }
+
+            if (probe == nullptr) {
+                const auto moving_probe = m_Production->MoveProbeToPosition(*m_Proletariat, position, distance, time_left);
+
+                if (!moving_probe.has_value()) {
+                    continue;
+                }
+
+                probe = moving_probe.value(); // can't be null
+            }
+
+            m_BuildingWorkers.emplace(plan.id, probe->tag);
+
+            m_Proletariat->RegisterWorker(probe);
 
             // Check if the probe is within range of the position (+ 0.5).
-            if (sc2::Distance2D(probe->pos, position) > distance + 0.5f) {
+            if (sc2::Distance2D(probe->pos, position) > distance + 1.0f) {
                 continue;
             }
 
@@ -194,6 +220,10 @@ void Bot::OnStep()
             }
 
             m_Production->BuildBuilding(probe, ability_id, position);
+
+            m_Proletariat->UnregisterWorker(probe);
+
+            m_BuildingWorkers.erase(plan.id);
 
             m_BuildOrder.erase(it);
 
@@ -267,7 +297,7 @@ void Bot::OnUnitIdle(const sc2::Unit* unit)
          "(" << unit->tag << ") is idle" << std::endl;
 
     // If the unit is a probe, send it to mine minerals or gas.
-    if (Utilities::IsWorker(unit)) {
+    if (Utilities::IsWorker(unit) && !m_Proletariat->IsWorkerAllocated(unit)) {
         m_Proletariat->ReturnToMining(unit);
     }
 }
@@ -297,6 +327,17 @@ void Bot::OnUnitDestroyed(const sc2::Unit* unit)
     if (executed_it != m_OrdersExecuted.end()) {
         m_OrdersExecuted.erase(executed_it);
     }
+
+    // Remove from build order.
+    for (auto it = m_BuildingWorkers.begin(); it != m_BuildingWorkers.end(); ++it) {
+        if (it->second == unit->tag) {
+            m_BuildingWorkers.erase(it);
+            break;
+        }
+    }
+
+    m_Proletariat->UnregisterWorker(unit);
+
 }
 
 void Bot::OnUpgradeCompleted(sc2::UpgradeID id_)
