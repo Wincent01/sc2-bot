@@ -95,6 +95,8 @@ public:
 private:
     sc2::Units RedistributeWorkers(const sc2::Unit* base, int32_t& workers_needed);
 
+    void AllocateWorkersToPoint(const sc2::Units& workers, const sc2::Unit* point);
+
     std::pair<int32_t, int32_t> CalculateWorkCount();
 
     std::pair<float, float> CalculateIncomePerSecond();
@@ -107,7 +109,7 @@ private:
 
     std::unordered_set<sc2::Tag> m_AllocatedWorkers;
 
-    std::unordered_map<sc2::Tag, std::unordered_set<sc2::Tag>> m_WorkerOnPoints;
+    std::unordered_map<sc2::Tag, sc2::Tag> m_WorkerPoints;
 };
 
 } // namespace scbot

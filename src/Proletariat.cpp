@@ -18,17 +18,42 @@ void scbot::Proletariat::RedistributeWorkers()
     std::unordered_map<const sc2::Unit*, int32_t> workers_needed_map;
     std::unordered_map<const sc2::Unit*, sc2::Units> excess_workers_map;
 
-    const auto& bases = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
+    //const auto& bases = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
 
     // Find all idle probes
     const auto& probes = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_PROBE);
 
-    for (const auto* probe : probes) {
+    // Find all mineral fields and extractors
+    auto points = Utilities::GetResourcePoints(
+        Utilities::Union(m_Collective->GetNeutralUnits(), m_Collective->GetAllUnits()),
+        false,
+        false,
+        true
+    );
+
+    // Allocate workers to points
+    for (const auto& point : points) {
+        AllocateWorkersToPoint(probes, point);
+    }
+
+    points = Utilities::GetResourcePoints(
+        Utilities::Union(m_Collective->GetNeutralUnits(), m_Collective->GetAllUnits()),
+        true,
+        false,
+        false
+    );
+
+    for (const auto& point : points) {
+        AllocateWorkersToPoint(probes, point);
+    }
+
+    /*for (const auto* probe : probes) {
         if (probe->orders.empty()) {
             ReturnToMining(probe);
         }
-    }
+    }*/
 
+    /*
     for (const auto& base : bases) {
         if (base->build_progress < 0.9f) {
             continue;
@@ -90,7 +115,7 @@ void scbot::Proletariat::RedistributeWorkers()
                 excess.pop_back();
             }
         }
-    }
+    }*/
 }
 
 void scbot::Proletariat::ReturnToMining(const sc2::Unit* probe)
@@ -121,32 +146,26 @@ void scbot::Proletariat::ReturnToMining(const sc2::Unit* probe)
         return;
     }
 
-    // Find the closest:
-    // * Mining point withing 15 units of a Nexus;
-    // * That has less than 2 probes mining it (3 for gas);
-    // * and that is not already being mined by a probe.
-    
     const sc2::Unit* closest_mining_point = nullptr;
     float closest_distance = std::numeric_limits<float>::max();
 
-    // Start by filtering out the mining points that are not within 15 units of a Nexus or have sufficient probes mining them.
     for (const auto& mining_point : mining_points) {
-        float closest_nexus_distance = Utilities::DistanceToClosest(nexus_units, mining_point->pos);
+        const auto num_allocated_probes = std::count_if(probes.begin(), probes.end(), [this, &mining_point](const sc2::Unit* probe) {
+            const auto& it = m_WorkerPoints.find(probe->tag);
 
-        if (closest_nexus_distance > PROBE_RANGE) {
-            continue;
-        }
-
-        const auto num_gas_probes = std::count_if(probes.begin(), probes.end(), [&mining_point](const sc2::Unit* probe) {
-            return Utilities::IsGatheringFrom(probe, mining_point);
+            if (it == m_WorkerPoints.end()) {
+                return false;
+            }
+            
+            return it->second == mining_point->tag;
         });
 
         if (Utilities::IsExtractor(mining_point)) {
-            if (num_gas_probes >= 3) {
+            if (num_allocated_probes >= 3) {
                 continue;
             }
         } else {
-            if (num_gas_probes >= 2) {
+            if (num_allocated_probes >= 2) {
                 continue;
             }
         }
@@ -165,7 +184,9 @@ void scbot::Proletariat::ReturnToMining(const sc2::Unit* probe)
 
     auto* actions = m_Collective->Actions();
 
-    actions->UnitCommand(probe, sc2::ABILITY_ID::HARVEST_GATHER, closest_mining_point);
+    actions->UnitCommand(probe, sc2::ABILITY_ID::HARVEST_GATHER, closest_mining_point, true);
+
+    m_WorkerPoints.emplace(probe->tag, closest_mining_point->tag);
 }
 
 const std::pair<int32_t, int32_t>& scbot::Proletariat::GetWorkerCount() const
@@ -247,6 +268,7 @@ const sc2::Unit* scbot::Proletariat::GetWorkerForBuilding(const sc2::Point2D& po
 void scbot::Proletariat::RegisterWorker(const sc2::Unit* worker)
 {
     m_AllocatedWorkers.emplace(worker->tag);
+    m_WorkerPoints.erase(worker->tag);
 }
 
 void scbot::Proletariat::UnregisterWorker(const sc2::Unit* worker)
@@ -266,6 +288,8 @@ void scbot::Proletariat::OnStep()
 }
 
 sc2::Units scbot::Proletariat::RedistributeWorkers(const sc2::Unit* base, int32_t& workers_needed) {
+    return sc2::Units();
+    /*
     auto* actions = m_Collective->Actions();
     const auto* obs = m_Collective->Observation();
 
@@ -390,5 +414,96 @@ sc2::Units scbot::Proletariat::RedistributeWorkers(const sc2::Unit* base, int32_
         }
     }
 
-    return excess_workers;
+    return excess_workers;*/
+}
+
+void scbot::Proletariat::AllocateWorkersToPoint(const sc2::Units& workers, const sc2::Unit* point)
+{
+    const auto& nexuses = m_Collective->GetAlliedUnitsOfType(sc2::UNIT_TYPEID::PROTOSS_NEXUS);
+
+    if (nexuses.empty()) {
+        return;
+    }
+
+    const auto* closest_nexus = Utilities::ClosestTo(nexuses, point->pos);
+
+    if (sc2::DistanceSquared2D(closest_nexus->pos, point->pos) > 15.0f * 15.0f || Utilities::IsInProgress(closest_nexus) || Utilities::IsInProgress(point)) {
+        for (auto it = m_WorkerPoints.begin(); it != m_WorkerPoints.end();) {
+            if (it->second == point->tag) {
+                it = m_WorkerPoints.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        return;
+    }
+
+    int32_t allocated = std::count_if(workers.begin(), workers.end(), [this, &point](const sc2::Unit* worker) {
+        const auto& it = m_WorkerPoints.find(worker->tag);
+
+        if (it == m_WorkerPoints.end()) {
+            return false;
+        }
+
+        return it->second == point->tag;
+    });
+
+    const int32_t wanted = Utilities::IsExtractor(point) ? 3 : 2;
+
+    if (allocated > wanted) {
+        // Find the furthest worker from the point and unassign it
+        const sc2::Unit* furthest = nullptr;
+        float furthest_distance = 0.0f;
+
+        for (const auto& worker : workers) {
+            const auto& it = m_WorkerPoints.find(worker->tag);
+
+            if (it == m_WorkerPoints.end()) {
+                continue;
+            }
+
+            if (it->second != point->tag) {
+                continue;
+            }
+
+            const auto distance = sc2::DistanceSquared2D(worker->pos, point->pos);
+
+            if (distance > furthest_distance) {
+                furthest = worker;
+                furthest_distance = distance;
+            }
+        }
+
+        if (furthest != nullptr) {
+            m_WorkerPoints.erase(furthest->tag);
+        }
+
+        return;
+    }
+
+    auto* actions = m_Collective->Actions();
+
+    const auto& ordered = Utilities::SortByDistance(workers, point->pos);
+
+    for (const auto& worker : ordered) {
+        if (allocated >= wanted) {
+            break;
+        }
+
+        if (IsWorkerAllocated(worker)) {
+            continue;
+        }
+
+        const auto& pointIt = m_WorkerPoints.find(worker->tag);
+
+        if (pointIt != m_WorkerPoints.end()) {
+            continue;
+        }
+
+        m_WorkerPoints.emplace(worker->tag, point->tag);
+
+        ++allocated;
+
+        actions->UnitCommand(worker, sc2::ABILITY_ID::HARVEST_GATHER, point, true);
+    }
 }

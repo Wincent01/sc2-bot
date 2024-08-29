@@ -103,7 +103,7 @@ int main(int argc, char* argv[])
         {
             CreateParticipant(sc2::Race::Protoss, &bot, "BlankBot"),
             CreateComputer(
-                sc2::Race::Random,
+                sc2::Race::Protoss,
                 sc2::Difficulty::CheatInsane,
                 sc2::AIBuild::Rush,
                 "CheatInsane"

@@ -117,6 +117,26 @@ std::optional<sc2::Point2D> scbot::Production::IdealPositionForBuilding(sc2::ABI
         return IdealPositionForAssimilator();
     case sc2::ABILITY_ID::BUILD_CYBERNETICSCORE:
         return IdealPositionForCyberneticsCore();
+    case sc2::ABILITY_ID::BUILD_STARGATE:
+        return IdealPositionForArbitrary2X2Building();
+    case sc2::ABILITY_ID::BUILD_FORGE:
+        return IdealPositionForArbitrary2X2Building();
+    case sc2::ABILITY_ID::BUILD_ROBOTICSFACILITY:
+        return IdealPositionForArbitrary2X2Building();
+    case sc2::ABILITY_ID::BUILD_TWILIGHTCOUNCIL:
+        return IdealPositionForArbitrary2X2Building();
+    case sc2::ABILITY_ID::BUILD_DARKSHRINE:
+        return IdealPositionForArbitrary2X2Building();
+    case sc2::ABILITY_ID::BUILD_TEMPLARARCHIVE:
+        return IdealPositionForArbitrary2X2Building();
+    case sc2::ABILITY_ID::BUILD_ROBOTICSBAY:
+        return IdealPositionForArbitrary2X2Building();
+    case sc2::ABILITY_ID::BUILD_FLEETBEACON:
+        return IdealPositionForArbitrary2X2Building();
+    case sc2::ABILITY_ID::BUILD_PHOTONCANNON:
+        return IdealPositionForArbitrary2X2Building();
+    case sc2::ABILITY_ID::BUILD_SHIELDBATTERY:
+        return IdealPositionForArbitrary2X2Building();
     default:
         return std::nullopt;
     }
@@ -138,7 +158,13 @@ std::optional<const sc2::Unit*> scbot::Production::IdealUnitForProduction(sc2::A
         return std::nullopt;
     }
 
-    const auto* least_busy = scbot::Utilities::LeastBusy(buildings);
+    const auto complete = scbot::Utilities::FilterOutInProgress(buildings);
+
+    if (complete.empty()) {
+        return std::nullopt;
+    }
+
+    const auto* least_busy = scbot::Utilities::LeastBusy(complete);
 
     return least_busy;
 }
@@ -339,16 +365,30 @@ std::optional<sc2::Point2D> scbot::Production::IdealPositionForPylon()
 
         const auto& closest_ramp = m_Collective->GetClosestRamp(closest_nexus->pos);
 
-        const auto result = scbot::Map::GetClosestPlace(
+        auto result = scbot::Map::GetClosestPlace(
             m_Collective->Query(),
             closest_ramp,
             closest_nexus->pos,
             sc2::ABILITY_ID::BUILD_PYLON,
-            2.0f,
-            4.0f
+            3.0f,
+            6.0f
         );
 
-        if (result.x != 0.0f && result.y != 0.0f) {
+        if (result.x == 0.0f && result.y == 0.0f) {
+            result = scbot::Map::GetClosestPlace(
+                m_Collective->Query(),
+                closest_ramp,
+                closest_nexus->pos,
+                sc2::ABILITY_ID::BUILD_PYLON,
+                2.0f,
+                3.0f
+            );
+
+            if (result.x != 0.0f && result.y != 0.0f) {
+                return result;
+            }
+        }
+        else {
             return result;
         }
     }
@@ -424,9 +464,24 @@ std::optional<sc2::Point2D> scbot::Production::IdealPositionForAssimilator()
         return std::nullopt;
     }
 
-    const auto* closest_vespene_geyser = Utilities::ClosestTo(vespene_geysers, selected_nexus->pos);
+    for (const auto& vespene_geyser : vespene_geysers) {
+        // Check if there already is a assimilator on this vespene geyser
+        bool already_has_assimilator = false;
+        for (const auto& assimilator : assimilators) {
+            if (sc2::DistanceSquared2D(assimilator->pos, vespene_geyser->pos) < 1.0f) {
+                already_has_assimilator = true;
+                break;
+            }
+        }
 
-    return closest_vespene_geyser->pos;
+        if (already_has_assimilator) {
+            continue;
+        }
+        
+        return vespene_geyser->pos;
+    }
+
+    return std::nullopt;
 }
 
 std::optional<sc2::Point2D> scbot::Production::IdealPositionForCyberneticsCore()

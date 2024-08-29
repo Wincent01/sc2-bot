@@ -182,4 +182,14 @@ namespace scdata {
     extern std::unordered_map<sc2::ABILITY_ID, sc2::ABILITY_ID> UnitTrainAbilityWarpTypes;
 
     extern std::unordered_set<sc2::ABILITY_ID> StructureTypes;
+
+    extern std::unordered_map<sc2::ABILITY_ID, int32_t> UnitSupply;
+
+    extern std::unordered_map<sc2::ABILITY_ID, sc2::UNIT_TYPEID> AbilityToUnit;
+
+    extern std::unordered_map<sc2::UNIT_TYPEID, sc2::ABILITY_ID> UnitToAbility; 
+
+    extern std::unordered_map<sc2::UNIT_TYPEID, std::unordered_set<sc2::UNIT_TYPEID>> UnitCounters;
+
+    extern std::unordered_map<sc2::UNIT_TYPEID, std::string> UnitTypeNames;
 }
