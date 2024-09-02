@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <memory>
+#include <coroutine>
 
 #include "Data.h"
 #include "Collective.h"
@@ -132,7 +133,7 @@ private:
 
     struct PlayerState {
         std::unordered_map<sc2::UNIT_TYPEID, uint32_t> units;
-        std::unordered_map<sc2::UNIT_TYPEID, uint32_t> planned_units;
+        std::unordered_map<sc2::UNIT_TYPEID, float> planned_units;
         std::deque<Move> steps;
         scdata::ResourcePair resources;
         float time;

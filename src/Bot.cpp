@@ -342,11 +342,21 @@ void Bot::OnStep()
     }
 
     // If there are building workers that are not clained, unclaim them.
-    for (auto& it = m_BuildingWorkers.begin(); it != m_BuildingWorkers.end(); ++it) {
-        if (claimed_workers.find(*it) == claimed_workers.end()) {
-            m_Proletariat->UnregisterWorker(obs->GetUnit(*it));
-            it = m_BuildingWorkers.erase(it);
+    auto building_workers_copy = std::vector<sc2::Tag>(m_BuildingWorkers.begin(), m_BuildingWorkers.end());
+    for (auto it = building_workers_copy.begin(); it != building_workers_copy.end(); it++) {
+        if (claimed_workers.find(*it) != claimed_workers.end()) {
+            continue;
         }
+
+        auto* worker = obs->GetUnit(*it);
+
+        if (worker == nullptr) {
+            continue;
+        }
+
+        m_Proletariat->UnregisterWorker(worker);
+
+        m_BuildingWorkers.erase(*it);
     }
 
     for (const auto& tag : m_OrdersExecuted) {
@@ -631,6 +641,9 @@ void Bot::UnmakeMove(BoardState &state)
     }
     if (!move.nullmove) {
         current.planned_units[move.unit] -= 1;
+        if (current.planned_units[move.unit] == 0) {
+            current.planned_units.erase(move.unit);
+        }
     }
     current.time = next_time;
 }
@@ -884,11 +897,17 @@ Bot::MoveSequence Bot::SearchBuild(int32_t depth, double alpha, double beta, Boa
         // Recursively search with reduced depth
         MoveSequence result = SearchBuild(depth - 1, alpha, beta, state, start, timeLimit);
 
-        UnmakeMove(state);
+        if (!move.nullmove) {
+            int i = 0;
+        }
+
+        state = oldState;
+
+        /*UnmakeMove(state);
 
         if (!CompareStates(oldState, state)) {
             std::cout << "State mismatch!" << std::endl;
-        }
+        }*/
 
         result.moves.insert(result.moves.begin(), move);
 
@@ -1019,13 +1038,41 @@ double Bot::EvaluatePlayer(PlayerState &a, PlayerState &b)
 {
     double score = 0.0;
 
-    //score += a.resources.minerals * 0.5;
-    //score += a.resources.vespene * 0.5;
+    score -= a.resources.minerals * 0.5;
+    score -= a.resources.vespene * 0.75;
 
     int32_t base_count = 0;
     int32_t worker_count = 0;
     int32_t assimilator_count = 0;
     int32_t supply_count = 0;
+
+    for (const auto& [type, count] : a.planned_units) {
+        switch (type) {
+            case sc2::UNIT_TYPEID::PROTOSS_NEXUS:
+            case sc2::UNIT_TYPEID::TERRAN_COMMANDCENTER:
+            case sc2::UNIT_TYPEID::ZERG_HATCHERY:
+            case sc2::UNIT_TYPEID::ZERG_HIVE:
+            case sc2::UNIT_TYPEID::ZERG_LAIR:
+                base_count += count;
+                supply_count += count * 15;
+                break;
+            case sc2::UNIT_TYPEID::PROTOSS_PROBE:
+            case sc2::UNIT_TYPEID::TERRAN_SCV:
+            case sc2::UNIT_TYPEID::ZERG_DRONE:
+                worker_count += count;
+                break;
+            case sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR:
+            case sc2::UNIT_TYPEID::TERRAN_REFINERY:
+            case sc2::UNIT_TYPEID::ZERG_EXTRACTOR:
+                assimilator_count += count;
+                break;
+            case sc2::UNIT_TYPEID::PROTOSS_PYLON:
+            case sc2::UNIT_TYPEID::TERRAN_SUPPLYDEPOT:
+            case sc2::UNIT_TYPEID::ZERG_OVERLORD:
+                supply_count += count * 8;
+                break;
+        }
+    }
 
     for (const auto& [type, count] : a.units) {
         switch (type) {
@@ -1064,7 +1111,7 @@ double Bot::EvaluatePlayer(PlayerState &a, PlayerState &b)
             if (supply_it != UnitSupply.end()) {
                 const auto& supply = supply_it->second;
 
-                score += count * supply * (ability == sc2::ABILITY_ID::TRAIN_PROBE ? 50 : 400);
+                score += count * supply * 250; //(ability == sc2::ABILITY_ID::TRAIN_PROBE ? 50 : 400);
 
                 supply_count -= count * supply;
             }
@@ -1114,8 +1161,10 @@ double Bot::EvaluatePlayer(PlayerState &a, PlayerState &b)
     // If we are close to supply cap, penalize, exponentially
     int32_t supply_left = supply_count;
     if (supply_left < 1) {
-        score -= supply_left * 100;
+        score -= 1000;
     }
+
+    score -= supply_left * 50;
 
     return score;
 }

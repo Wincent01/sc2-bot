@@ -13,6 +13,7 @@ set(bot_sources
     Production.cpp
     Economy.cpp
     Liberation.cpp
+    Macro.cpp
     )
 
 add_executable(BlankBot ${bot_sources})
