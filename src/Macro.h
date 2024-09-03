@@ -1,9 +1,10 @@
 #pragma once
 
-#include <coroutine>
+#include <thread>
 
 #include "Collective.h"
-#include "Generator.h"
+
+#include <sc2api/sc2_interfaces.h>
 
 namespace scbot {
 
@@ -75,20 +76,119 @@ struct MoveSequence {
     double score;
     std::vector<Move> moves;
 
-    MoveSequence() : score(0.0) {}
-
     MoveSequence(double s = 0.0, std::vector<Move> m = {}) : score(s), moves(m) {}
+};
+
+struct TranspositionEntry {
+    double score;
+    int32_t depth;
+    double alpha;
+    double beta;
+    std::vector<Move> bestMoveSequence;
+};
+
+class MacroPromise {
+    friend class Macro;
+public:
+    std::shared_ptr<MoveSequence> Complete();
+
+    ~MacroPromise();
+
+private:
+    std::shared_ptr<bool> m_CancellationToken;
+    std::shared_ptr<MoveSequence> m_Result;
+    std::thread m_Thread;
 };
 
 class Macro {
 public:
-    Generator<std::shared_ptr<MoveSequence>>
-    SearchBuild(
+    /**
+     * @brief Construct a new Macro object
+     * 
+     * @param collective The collective object
+     */
+    Macro(std::shared_ptr<Collective> collective);
+
+    /**
+     * @brief Destroy the Macro object
+     */
+    ~Macro();
+
+    /**
+     * @brief Method that is called every frame.
+     */
+    void OnStep();
+
+    /**
+     * @brief Start searching for the best move sequence.
+     * 
+     * @return A promise with the result of the search that can be completed later
+     */
+    std::shared_ptr<MacroPromise> Search();
+
+private:
+    MoveSequence SearchBuild(
         int32_t depth,
         double alpha,
         double beta,
+        BoardState& state,
+        std::shared_ptr<bool> cancellation_token
+    );
+
+    double EvaluateState(
         BoardState& state
     );
+
+    void MakeMove(
+        const Move& move,
+        BoardState& state
+    );
+
+    void UnmakeMove(
+        BoardState& state
+    );
+
+    std::vector<Move> GetPossibleMoves(
+        BoardState& state, float timestep
+    );
+
+    void GetBestMove(
+        BoardState& state,
+        std::shared_ptr<bool> cancellation_token,
+        std::shared_ptr<MoveSequence> result_ptr
+    );
+
+    double MoveHeuristic(
+        const Move& move
+    );
+
+    void SortMoves(
+        std::vector<Move>& moves
+    );
+
+    double EvaluatePlayer(
+        PlayerState& a,
+        PlayerState& b
+    );
+
+    bool CompareStates(
+        BoardState& a,
+        BoardState& b
+    );
+
+    uint64_t ComputeHash(const BoardState& state);
+
+    bool LookupTranspositionTable(const BoardState& state, int32_t depth, double alpha, double beta, MoveSequence& outResult);
+
+    void SaveToTranspositionTable(const BoardState& state, double score, int32_t depth, double alpha, double beta, const MoveSequence& bestSequence);
+
+    BoardState GetState();
+    
+    std::unordered_map<uint64_t, TranspositionEntry> m_TranspositionTable;
+
+    std::shared_ptr<Collective> m_Collective;
+
+    sc2::UnitTypes m_UnitTypes;
 };
 
 } // namespace scbot
