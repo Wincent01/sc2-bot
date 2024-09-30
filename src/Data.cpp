@@ -408,5 +408,20 @@ std::unordered_map<sc2::UNIT_TYPEID, std::string> scdata::UnitTypeNames {
     {sc2::UNIT_TYPEID::PROTOSS_PHOENIX, "Phoenix"},
     {sc2::UNIT_TYPEID::PROTOSS_ORACLE, "Oracle"},
     {sc2::UNIT_TYPEID::PROTOSS_TEMPEST, "Tempest"},
-    {sc2::UNIT_TYPEID::PROTOSS_MOTHERSHIP, "Mothership"}
+    {sc2::UNIT_TYPEID::PROTOSS_MOTHERSHIP, "Mothership"},
+    {sc2::UNIT_TYPEID::PROTOSS_NEXUS, "Nexus"},
+    {sc2::UNIT_TYPEID::PROTOSS_PYLON, "Pylon"},
+    {sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR, "Assimilator"},
+    {sc2::UNIT_TYPEID::PROTOSS_GATEWAY, "Gateway"},
+    {sc2::UNIT_TYPEID::PROTOSS_FORGE, "Forge"},
+    {sc2::UNIT_TYPEID::PROTOSS_CYBERNETICSCORE, "Cybernetics Core"},
+    {sc2::UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, "Robotics Facility"},
+    {sc2::UNIT_TYPEID::PROTOSS_STARGATE, "Stargate"},
+    {sc2::UNIT_TYPEID::PROTOSS_TEMPLARARCHIVE, "Templar Archive"},
+    {sc2::UNIT_TYPEID::PROTOSS_DARKSHRINE, "Dark Shrine"},
+    {sc2::UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL, "Twilight Council"},
+    {sc2::UNIT_TYPEID::PROTOSS_FLEETBEACON, "Fleet Beacon"},
+    {sc2::UNIT_TYPEID::PROTOSS_ROBOTICSBAY, "Robotics Bay"},
+    {sc2::UNIT_TYPEID::PROTOSS_PHOTONCANNON, "Photon Cannon"},
+    {sc2::UNIT_TYPEID::PROTOSS_SHIELDBATTERY, "Shield Battery"}
 };

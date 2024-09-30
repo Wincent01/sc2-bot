@@ -141,8 +141,28 @@ void Macro::MakeMove(BoardState &state, const Move &move)
     current.steps.push_back(move);
     current.resources = current.resources + move.cost;
 
-    if (!move.nullmove) {
-        current.units[move.unit] += 1;
+    if (state.simple)
+    {
+        if (!move.nullmove) {
+            current.units[move.unit] += 1;
+        }
+    }
+    else
+    {
+        // Loop through the steps, see if any of their complete times passed this time step
+        for (auto it = current.steps.begin(); it != current.steps.end(); ++it) {
+            auto& step = *it;
+            if (current_time < step.complete_time && next_time >= step.complete_time) {
+                if (step.nullmove) {
+                    continue;
+                }
+                current.units[step.unit] += 1;
+                current.planned_units[step.unit] -= 1;
+            }
+        }
+        if (!move.nullmove) {
+            current.planned_units[move.unit] += 1;
+        }
     }
 
     current.time = next_time;
@@ -168,8 +188,37 @@ void Macro::UnmakeMove(BoardState &state, const Move &move)
     // Reverse the resource addition by subtracting the move's cost.
     current.resources = current.resources - move.cost;
 
-    if (!move.nullmove) {
-        current.units[move.unit] -= 1;
+    if (state.simple) {
+        if (!move.nullmove) {
+            current.units[move.unit] -= 1;
+        }
+    } else {
+        // Reverse any completed steps during this time frame.
+        for (auto it = current.steps.begin(); it != current.steps.end(); ++it) {
+            auto& step = *it;
+            // If this step was completed in the previous time window, undo the unit changes.
+            if (prev_time < step.complete_time && current_time >= step.complete_time) {
+                if (step.nullmove) {
+                    continue;
+                }
+                // Decrement the unit count and increment the planned unit count.
+                current.units[step.unit] -= 1;
+                current.planned_units[step.unit] += 1;
+
+                if (current.units[step.unit] == 0) {
+                    current.units.erase(step.unit);
+                }
+            }
+        }
+
+        // If the move was not a null move, reverse the increment of planned units.
+        if (!move.nullmove) {
+            current.planned_units[move.unit] -= 1;
+
+            if (current.planned_units[move.unit] == 0) {
+                current.planned_units.erase(move.unit);
+            }
+        }
     }
 }
 
@@ -239,6 +288,42 @@ std::vector<Move> Macro::GetPossibleMoves(BoardState &state, float timestep)
 
     ResourcePair resources = {mineral_income, vespene_income};
 
+    for (const auto& planned : planned_units) {
+        const auto& ability_it = UnitToAbility.find(planned.first);
+
+        if (ability_it != UnitToAbility.end()) {
+            const auto& ability = ability_it->second;
+
+            const auto& supply_it = UnitSupply.find(ability);
+
+            if (supply_it != UnitSupply.end()) {
+                const auto& supply = supply_it->second;
+
+                num_supply -= planned.second * supply;
+            }
+        }
+
+        switch (planned.first) {
+            case sc2::UNIT_TYPEID::PROTOSS_PROBE:
+            case sc2::UNIT_TYPEID::TERRAN_SCV:
+            case sc2::UNIT_TYPEID::ZERG_DRONE:
+                num_workers += planned.second;
+                break;
+            case sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR:
+            case sc2::UNIT_TYPEID::TERRAN_REFINERY:
+            case sc2::UNIT_TYPEID::ZERG_EXTRACTOR:
+                num_extractors += planned.second;
+                break;
+            case sc2::UNIT_TYPEID::PROTOSS_NEXUS:
+            case sc2::UNIT_TYPEID::TERRAN_COMMANDCENTER:
+            case sc2::UNIT_TYPEID::ZERG_HATCHERY:
+            case sc2::UNIT_TYPEID::ZERG_HIVE:
+            case sc2::UNIT_TYPEID::ZERG_LAIR:
+                num_bases += planned.second;
+                break;
+        }
+    }
+
     // Generate all possible moves
     for (const auto& [ability, requirements] : AbilityRequirements) {
         if (ability == sc2::ABILITY_ID::TRAIN_PROBE) {
@@ -249,13 +334,6 @@ std::vector<Move> Macro::GetPossibleMoves(BoardState &state, float timestep)
 
         if (ability == sc2::ABILITY_ID::BUILD_ASSIMILATOR) {
             if (num_extractors >= num_bases * 2) {
-                continue;
-            }
-        }
-
-        // If we have more than 8 free supply, don't build pylons
-        if (ability == sc2::ABILITY_ID::BUILD_PYLON) {
-            if (num_supply >= 8) {
                 continue;
             }
         }
@@ -330,22 +408,6 @@ void Macro::GetBestMove(
         std::vector<Move> moves = GetPossibleMoves(state, 5.0f);
         SortMoves(moves);  // Sort moves using a heuristic to improve pruning efficiency
 
-        // Print the possible moves
-        if (depth == 1) {
-            for (const auto& move : moves) {
-                const auto& it = UnitTypeNames.find(move.unit);
-
-                if (it != UnitTypeNames.end()) {
-                    std::cout << "Move: " << it->second << " (" << move.cost.minerals << ", " << move.cost.vespene << ") t=" << move.delta_time << std::endl;
-                }
-                else {
-                    std::cout << "Move: " << static_cast<int32_t>(move.unit) << " (" << move.cost.minerals << ", " << move.cost.vespene << ") t=" << move.delta_time << std::endl;
-                }
-            }
-
-            std::cout << "----------------" << std::endl;
-        }
-
         // Search with current depth
         for (const Move& move : moves) {
             auto oldState = state;
@@ -384,7 +446,7 @@ void Macro::GetBestMove(
 double Macro::MoveHeuristic(const Move &move)
 {
     if (move.nullmove) {
-        return -1000;
+        return 0.0;
     }
 
     double heuristic = 0.0;
@@ -409,13 +471,9 @@ double Macro::MoveHeuristic(const Move &move)
 
             heuristic += cost.minerals + cost.vespene * 1.5;
         }
-        
-        if (ability == sc2::ABILITY_ID::BUILD_PYLON) {
-            heuristic = -100;
-        }
 
         if (ability == sc2::ABILITY_ID::BUILD_ASSIMILATOR) {
-            heuristic = -500;
+            heuristic = -100;
         }
     }
 
@@ -433,14 +491,41 @@ double Macro::EvaluatePlayer(PlayerState &a, PlayerState &b)
 {
     double score = 0.0;
 
-    // Peanlize for not using resources
-    //score -= a.resources.minerals * 0.5;
-    //score -= a.resources.vespene * 0.75;
+    score -= a.resources.minerals * 0.5;
+    score -= a.resources.vespene * 0.75;
 
     int32_t base_count = 0;
     int32_t worker_count = 0;
     int32_t assimilator_count = 0;
     int32_t supply_count = 0;
+
+    for (const auto& [type, count] : a.planned_units) {
+        switch (type) {
+            case sc2::UNIT_TYPEID::PROTOSS_NEXUS:
+            case sc2::UNIT_TYPEID::TERRAN_COMMANDCENTER:
+            case sc2::UNIT_TYPEID::ZERG_HATCHERY:
+            case sc2::UNIT_TYPEID::ZERG_HIVE:
+            case sc2::UNIT_TYPEID::ZERG_LAIR:
+                base_count += count;
+                supply_count += count * 15;
+                break;
+            case sc2::UNIT_TYPEID::PROTOSS_PROBE:
+            case sc2::UNIT_TYPEID::TERRAN_SCV:
+            case sc2::UNIT_TYPEID::ZERG_DRONE:
+                worker_count += count;
+                break;
+            case sc2::UNIT_TYPEID::PROTOSS_ASSIMILATOR:
+            case sc2::UNIT_TYPEID::TERRAN_REFINERY:
+            case sc2::UNIT_TYPEID::ZERG_EXTRACTOR:
+                assimilator_count += count;
+                break;
+            case sc2::UNIT_TYPEID::PROTOSS_PYLON:
+            case sc2::UNIT_TYPEID::TERRAN_SUPPLYDEPOT:
+            case sc2::UNIT_TYPEID::ZERG_OVERLORD:
+                supply_count += count * 8;
+                break;
+        }
+    }
 
     for (const auto& [type, count] : a.units) {
         switch (type) {
@@ -497,6 +582,21 @@ double Macro::EvaluatePlayer(PlayerState &a, PlayerState &b)
                 }
             }
         }
+
+        /*
+        const auto& counters_it = UnitCounters.find(type);
+
+        if (counters_it != UnitCounters.end()) {
+            const auto& counters = counters_it->second;
+
+            for (const auto& counter : counters) {
+                const auto& counter_count = b.units.find(counter);
+
+                if (counter_count != b.units.end()) {
+                    score += counter_count->second * 100;
+                }
+            }
+        }*/
     }
 
     score += base_count * 100;
@@ -514,9 +614,9 @@ double Macro::EvaluatePlayer(PlayerState &a, PlayerState &b)
     }
     
     // If we are close to supply cap, penalize, exponentially
-    //const auto supply_delta = std::abs(supply_count);
+    const auto supply_delta = std::abs(supply_count);
 
-    //score -= supply_delta * 1000;
+    score -= supply_delta * 100;
 
     return score;
 }
@@ -540,17 +640,6 @@ BoardState Macro::GetState()
         } else if (unit->alliance == sc2::Unit::Alliance::Enemy) {
             state.enemy_units.units[unit->unit_type] += 1;
         }
-    }
-
-    // Print the state
-    std::cout << "Friendly units:" << std::endl;
-    for (const auto& [type, count] : state.friendly_units.units) {
-        std::cout << UnitTypeNames[type] << ": " << count << std::endl;
-    }
-
-    std::cout << "Enemy units:" << std::endl;
-    for (const auto& [type, count] : state.enemy_units.units) {
-        std::cout << UnitTypeNames[type] << ": " << count << std::endl;
     }
 
     // TODO: Update based on scounted info

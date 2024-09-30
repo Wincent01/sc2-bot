@@ -62,6 +62,7 @@ struct BoardState {
     PlayerState enemy_units;
     bool terminal;
     bool turn;
+    bool simple;
     
     static bool equals(const BoardState& lhs, const BoardState& rhs) {
         // Compare friendly and enemy PlayerState, terminal, and turn
@@ -140,12 +141,13 @@ private:
     );
 
     void MakeMove(
-        const Move& move,
-        BoardState& state
+        BoardState& state,
+        const Move& move
     );
 
     void UnmakeMove(
-        BoardState& state
+        BoardState& state,
+        const Move& move
     );
 
     std::vector<Move> GetPossibleMoves(
