@@ -7,7 +7,7 @@
 #include <sc2api/sc2_agent.h>
 
 #include "Collective.h"
-#include "config.h"
+#include "Config.h"
 
 namespace scbot
 {

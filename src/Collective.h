@@ -5,7 +5,7 @@
 
 #include <unordered_map>
 
-#include "config.h"
+#include "Config.h"
 #include "Data.h"
 
 namespace scbot

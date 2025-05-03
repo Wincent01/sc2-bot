@@ -374,7 +374,7 @@ const sc2::Point3D scbot::Utilities::ClosestTo(const std::vector<sc2::Point3D>& 
 const sc2::Unit* scbot::Utilities::SelectUnit(const sc2::Units& units, std::function<bool(const sc2::Unit*, const sc2::Unit*)> predicate) {
     NON_EMPTY(units);
     
-    const auto& it = std::min_element(units.begin(), units.end(), predicate);
+    auto it = std::min_element(units.begin(), units.end(), predicate);
 
     return it != units.end() ? *it : nullptr;
 }

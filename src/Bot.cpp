@@ -105,7 +105,7 @@ void Bot::OnStep()
         CheckDelayedOrder(unit);
     }
 
-    if (m_NextMacroDispatch < time_in_seconds) {
+    /*if (m_NextMacroDispatch < time_in_seconds) {
         if (m_HasMacroPromise) {
             auto result = m_MacroPromise->Complete();
 
@@ -145,7 +145,7 @@ void Bot::OnStep()
         m_HasMacroPromise = true;
 
         m_NextMacroDispatch = time_in_seconds + 10.0f;
-    }
+    }*/
 
     // Check if the next build dispatch time has been reached.
     if (time_in_seconds < m_NextBuildDispatch) {

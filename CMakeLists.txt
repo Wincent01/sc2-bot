@@ -40,8 +40,13 @@ endif ()
 
 list(APPEND CMAKE_MODULE_PATH thirdparty/cmake)
 
+# Ignore incompatible-pointer-types warning
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    add_compile_options(-Wno-incompatible-pointer-types)
+endif ()
+
 # cpp-sc2 dependency
-include(cpp_sc2)
+add_subdirectory(cpp-sc2)
 
 # bot sources
 add_subdirectory(src)

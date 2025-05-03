@@ -9,6 +9,10 @@
 #include <sc2utils/sc2_arg_parser.h>
 
 #include <iostream>
+#include <string>
+
+#include <signal.h>
+#include <unistd.h>
 
 #ifdef BUILD_FOR_LADDER
 namespace
@@ -90,6 +94,18 @@ int main(int argc, char* argv[])
 int main(int argc, char* argv[])
 {
     sc2::Coordinator coordinator;
+
+    // Enable visualizer.
+    sc2::RenderSettings render_settings;
+    
+    render_settings.map_x = 800;
+    render_settings.map_y = 600;
+    render_settings.minimap_x = 300;
+    render_settings.minimap_y = 300;
+
+    coordinator.SetRender(render_settings);
+    coordinator.SetStepSize(1);
+    
     coordinator.LoadSettings(argc, argv);
 
     // NOTE: Uncomment to start the game in full screen mode.
@@ -110,11 +126,29 @@ int main(int argc, char* argv[])
                 )
         });
 
-    coordinator.LaunchStarcraft();
+    coordinator.Connect(8167);
+
     coordinator.StartGame("Equilibrium513AIE.SC2Map");
+
+    // Handle Ctrl-C to clean up SC2 process
+    struct sigaction sigIntHandler;
+    sigIntHandler.sa_handler = [](int s) {
+        std::cout << "Caught signal " << s << ", terminating SC2 process..." << std::endl;
+        system("pkill -f 'SC2_x64.exe'");
+        exit(1);
+    };
+    sigemptyset(&sigIntHandler.sa_mask);
+    sigIntHandler.sa_flags = 0;
+
+    sigaction(SIGINT, &sigIntHandler, nullptr);
+    sigaction(SIGTERM, &sigIntHandler, nullptr);
+    sigaction(SIGQUIT, &sigIntHandler, nullptr);
 
     while (coordinator.Update())
     {}
+
+    // Terminate SC2 process after game ends
+    system("pkill -f 'SC2_x64.exe'");
 
     return 0;
 }

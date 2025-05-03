@@ -1,0 +1,1 @@
+pkill -f 'SC2_x64.exe'

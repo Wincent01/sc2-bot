@@ -7,8 +7,8 @@
 // Begin assertions
 #pragma region Assertions
 #ifdef ENABLE_ASSERTIONS
-#define ASSERT(x) if(!(x)) throw std::exception("Assertion failed: " #x)
-#define ASSERT_MSG(x, msg) if(!(x)) throw std::exception("Assertion failed: " #x " " msg)
+#define ASSERT(x) if(!(x)) throw std::runtime_error("Assertion failed: " #x)
+#define ASSERT_MSG(x, msg) if(!(x)) throw std::runtime_error("Assertion failed: " #x " " msg)
 #else
 #define ASSERT(x)
 #define ASSERT_MSG(x, msg)
